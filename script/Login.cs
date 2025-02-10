@@ -29,6 +29,14 @@ public class Login : MonoBehaviour
 
     void Start()
     {
+        // Check database configuration first
+        if (string.IsNullOrEmpty(PlayerPrefs.GetString("MONGO_URI", "")))
+        {
+            Debug.LogError("MongoDB not initialized! Make sure MongoDBConfig is in the scene.");
+            feedbackText.text = "Database configuration error. Please restart the application.";
+            return;
+        }
+
         // Hide all login borders initially
         loginBorderStudent.SetActive(false);
         loginBorderTeacherAdmin.SetActive(false);

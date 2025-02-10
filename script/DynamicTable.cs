@@ -58,12 +58,12 @@ public class DynamicTable : MonoBehaviour
     public GameObject FeedbackPanel;
     public TMP_Dropdown selectDropdown; // Reference to the dropdown for selecting options
 
-    public TMP_Text debugConsoleText; // Reference to a TextMeshPro text component for debug output
     private Queue<string> debugLines = new Queue<string>();
     private const int MAX_DEBUG_LINES = 10; // Maximum number of lines to show
 
-    public GameObject debugConsolePanel; // Reference to the debug console panel
-    public Button debugToggleButton;     // Reference to a button to toggle the console
+   // public TMP_Text debugConsoleText; // Reference to a TextMeshPro text component for debug output
+   // public GameObject debugConsolePanel; // Reference to the debug console panel
+   // public Button debugToggleButton;     // Reference to a button to toggle the console
 
     public enum RewardType
     {
@@ -86,6 +86,7 @@ public class DynamicTable : MonoBehaviour
 
     private bool isRemovingStudent = false; // Flag to prevent multiple removals
     private bool isUploadInProgress = false; // Flag to track upload state
+    private bool isProcessing = false;
 
     public void OpenSendRewardsPanel(RewardType reward, string studentName)
     {
@@ -232,7 +233,6 @@ public class DynamicTable : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError($"Critical error in Start: {ex.Message}\n{ex.StackTrace}");
-            LogToScreen("Failed to initialize. Please restart the application.");
         }
     }
 
@@ -242,37 +242,75 @@ public class DynamicTable : MonoBehaviour
     {
         try
         {
-            var connectionString = "mongodb+srv://vbdb:abcdefghij@cluster0.8i1sn.mongodb.net/Users?retryWrites=true&w=majority";
+            // Get connection string from PlayerPrefs instead of environment variable
+            var connectionString = PlayerPrefs.GetString("MONGO_URI", "");
+            
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                Debug.LogError("MongoDB initialization failed: MONGO_URI is not set in PlayerPrefs");
+                ShowFeedback("Database configuration missing. Please check settings.");
+                return;
+            }
+
             var settings = MongoClientSettings.FromConnectionString(connectionString);
-            settings.ServerApi = new ServerApi(ServerApiVersion.V1);
-            settings.ServerSelectionTimeout = TimeSpan.FromSeconds(10);
-            settings.ConnectTimeout = TimeSpan.FromSeconds(15);
-            settings.SocketTimeout = TimeSpan.FromSeconds(15);
+            
+            // Ensure the server list is not empty
+            if (settings.Servers.Count() == 0)
+            {
+                Debug.LogError("MongoDB initialization failed: List of configured name servers must not be empty.");
+                ShowFeedback("Invalid database configuration.");
+                return;
+            }
 
             var client = new MongoClient(settings);
             database = client.GetDatabase("Users");
 
-            // Verify connection
-            var pingTask = database.RunCommandAsync((Command<BsonDocument>)"{ping:1}");
-            pingTask.Wait(5000); // Wait up to 5 seconds for ping
-
-            Debug.Log("Attempting to connect to MongoDB...");
-            Debug.Log("MongoDB initialization successful");
-            isDatabaseInitialized = true; // Set the flag to true
-            ShowFeedback("Database connected successfully.");
-        }
-        catch (MongoConnectionException mongoEx)
-        {
-            Debug.LogError($"MongoDB connection error: {mongoEx.Message}");
-            isDatabaseInitialized = false; // Set the flag to false
-            ShowFeedback("MongoDB connection error. Please check your connection settings.");
+            // Verify connection asynchronously
+            StartCoroutine(VerifyDatabaseConnection());
         }
         catch (Exception ex)
         {
             Debug.LogError($"MongoDB initialization failed: {ex.Message}");
-            database = null; // Ensure database is null if initialization fails
-            isDatabaseInitialized = false; // Set the flag to false
+            database = null;
+            isDatabaseInitialized = false;
             ShowFeedback("Database connection failed. Please check your internet connection.");
+        }
+    }
+
+    private IEnumerator VerifyDatabaseConnection()
+    {
+        if (database == null)
+        {
+            Debug.LogError("Database is null during verification");
+            isDatabaseInitialized = false;
+            ShowFeedback("Database connection failed.");
+            yield break;
+        }
+
+        var pingCommand = new BsonDocument("ping", 1);
+        var pingTask = database.RunCommandAsync<BsonDocument>(pingCommand);
+        
+        // Move the yield outside of try-catch
+        while (!pingTask.IsCompleted)
+        {
+            yield return null;
+        }
+
+        try
+        {
+            if (pingTask.Exception != null)
+                throw pingTask.Exception;
+
+            Debug.Log("MongoDB connection verified successfully");
+            isDatabaseInitialized = true;
+            ShowFeedback("Database connected successfully.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"MongoDB verification failed: {ex.Message}");
+            database = null;
+            isDatabaseInitialized = false;
+            ShowFeedback("Database connection failed. Please check your connection.");
         }
     }
 
@@ -309,13 +347,12 @@ public class DynamicTable : MonoBehaviour
             StartCoroutine(SafeFetchStudents());
 
             FetchSections();
-            SetupDebugConsole();
+         //   SetupDebugConsole();
             AssignButtonListeners();
         }
         catch (Exception ex)
         {
             Debug.LogError($"Initialization error: {ex.Message}");
-            LogToScreen("Error during initialization");
         }
     }
 
@@ -323,7 +360,6 @@ public class DynamicTable : MonoBehaviour
     {
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-            LogToScreen("No internet connection");
             yield break;
         }
 
@@ -334,7 +370,6 @@ public class DynamicTable : MonoBehaviour
     {
         if (type == LogType.Exception || type == LogType.Error)
         {
-            LogToScreen($"Error: {logString}");
         }
     }
 
@@ -509,443 +544,564 @@ public class DynamicTable : MonoBehaviour
     {
         Debug.Log("Upload button clicked");
 
-        if (isUploadInProgress)
+        if (isUploadInProgress || isProcessing)
         {
-            Debug.LogWarning("Upload is already in progress. Ignoring this click.");
+            Debug.LogWarning("Process already in progress. Please wait...");
+            ShowFeedback("Please wait for current process to complete");
             return;
         }
 
-        uploadButton.interactable = false;
         isUploadInProgress = true;
+        isProcessing = true;
+        uploadButton.interactable = false;
 
-        #if UNITY_ANDROID
-        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
+        try
         {
-            Permission.RequestUserPermission(Permission.ExternalStorageRead);
-            Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-            StartCoroutine(WaitForPermissionAndPickFile());
-            return;
-        }
-        #endif
+            #if UNITY_ANDROID
+            if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
+            {
+                Permission.RequestUserPermission(Permission.ExternalStorageRead);
+                Permission.RequestUserPermission(Permission.ExternalStorageWrite);
+                StartCoroutine(WaitForPermissionAndPickFile());
+                return;
+            }
+            #endif
 
-        PickAndProcessFile();
+            PickFile(); // Changed from PickAndProcessFile() to PickFile()
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Error starting upload: {ex.Message}");
+            ShowFeedback("Upload failed to start. Please try again.");
+            ResetUploadState();
+        }
+    }
+
+    private void ResetUploadState()
+    {
+        if (this == null) return;
+        
+        isUploadInProgress = false;
+        isProcessing = false;
+        if (uploadButton != null)
+        {
+            uploadButton.interactable = true;
+        }
     }
 
     private IEnumerator WaitForPermissionAndPickFile()
     {
         yield return new WaitForSeconds(0.5f);
-        PickAndProcessFile();
+        
+        if (Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
+        {
+            PickFile();
+        }
+        else
+        {
+            Debug.LogWarning("Storage permission not granted");
+            ShowFeedback("Storage permission required to select files");
+            ResetUploadState();
+        }
     }
 
-    private void PickAndProcessFile()
+    private void PickFile()
     {
         try
         {
-            string[] allowedExtensions = new[] { "csv", "txt" }; // Added txt as fallback
             var mimeTypes = new[] { "text/csv", "text/comma-separated-values", "text/plain" };
 
-            #if UNITY_ANDROID
-            // For Android, we need to explicitly check and request permissions
-            if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
+            NativeFilePicker.Permission permission = NativeFilePicker.PickFile(async (path) =>
             {
-                Permission.RequestUserPermission(Permission.ExternalStorageRead);
-                Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-                ShowFeedback("Please grant storage permissions and try again");
-                uploadButton.interactable = true;
-                isUploadInProgress = false;
-                return;
-            }
-            #endif
-
-            NativeFilePicker.Permission permission = NativeFilePicker.PickFile((path) =>
-            {
-                if (!string.IsNullOrEmpty(path))
+                if (string.IsNullOrEmpty(path))
                 {
-                    Debug.Log($"Selected file path: {path}");
-                    if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) || 
-                        path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ProcessCSVFileAsync(path);
-                    }
-                    else
-                    {
-                        ShowFeedback("Please select a CSV file");
-                        uploadButton.interactable = true;
-                        isUploadInProgress = false;
-                    }
+                    ShowFeedback("File selection cancelled");
+                    ResetUploadState();
+                    return;
+                }
+
+                Debug.Log($"Selected file path: {path}");
+                if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    await UploadFileToServer(path);
                 }
                 else
                 {
-                    Debug.Log("File selection cancelled");
-                    ShowFeedback("File selection cancelled");
-                    uploadButton.interactable = true;
-                    isUploadInProgress = false;
+                    ShowFeedback("Please select a CSV file");
+                    ResetUploadState();
                 }
             }, mimeTypes);
 
-            Debug.Log($"File picker permission result: {permission}");
-            
             if (permission != NativeFilePicker.Permission.Granted)
             {
-                ShowFeedback("Permission not granted. Please check app settings.");
-                uploadButton.interactable = true;
-                isUploadInProgress = false;
+                ShowFeedback("File picker permission not granted");
+                ResetUploadState();
             }
         }
         catch (Exception ex)
         {
             Debug.LogError($"Error in file picker: {ex.Message}");
             ShowFeedback("Error selecting file. Please try again.");
-            uploadButton.interactable = true;
-            isUploadInProgress = false;
+            ResetUploadState();
         }
     }
 
-// Fix for ProcessCSVFile coroutine
-private async void ProcessCSVFileAsync(string filePath)
-{
-    Debug.Log("Starting to process CSV file");
-    
-    // Initialize MongoDB if not already initialized
-    if (!isDatabaseInitialized)
+    private async Task UploadFileToServer(string filePath)
     {
-        InitializeMongoDB();
-        await Task.Delay(1000); // Wait for initialization
-        
-        if (!isDatabaseInitialized)
+        try
         {
-            ShowFeedback("Failed to connect to database. Please check your connection.");
-            uploadButton.interactable = true;
-            isUploadInProgress = false;
-            return;
-        }
-    }
+            ShowFeedback("Uploading file...");
 
-    ShowFeedback("Reading CSV file...");
-    
-    try
-    {
-        string content;
-        using (var reader = new StreamReader(filePath))
-        {
-            content = await reader.ReadToEndAsync();
-        }
-        
-        string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        Debug.Log($"Read {lines.Length} lines from CSV");
+            // Create form with file data
+            WWWForm form = new WWWForm();
+            byte[] fileData = File.ReadAllBytes(filePath);
+            form.AddBinaryData("file", fileData, Path.GetFileName(filePath), "text/csv");
 
-        if (lines.Length <= 1)
-        {
-            ShowFeedback("CSV file is empty or contains only headers");
-            return;
-        }
-
-        var collection = database.GetCollection<BsonDocument>("users");
-        int successCount = 0;
-        
-        // Skip header row
-        for (int i = 1; i < lines.Length; i++)
-        {
-            string[] values = lines[i].Split(',');
-            if (values.Length >= 6)
+            using (UnityWebRequest request = UnityWebRequest.Post($"{baseUrl}/upload", form))
             {
-                string firstName = values[0].Trim();
-                string lastName = values[1].Trim();
-                string role = values[2].Trim();
-                string section = values[3].Trim();
-                string username = values[4].Trim();
-                string character = values[5].Trim();
-
-                if (!string.IsNullOrEmpty(firstName) && !string.IsNullOrEmpty(lastName))
+                request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
+                request.timeout = 30; // Increase timeout to 30 seconds
+                
+                Debug.Log($"Sending file: {Path.GetFileName(filePath)}");
+                var operation = request.SendWebRequest();
+                
+                while (!operation.isDone) 
                 {
-                    try
-                    {
-                        var studentData = new BsonDocument
-                        {
-                            { "FirstName", firstName },
-                            { "LastName", lastName },
-                            { "FullName", $"{firstName} {lastName}" },
-                            { "Role", role },
-                            { "Section", section },
-                            { "Username", username },
-                            { "Character", character },
-                            { "rewards_collected", new BsonArray() }
-                        };
+                    ShowFeedback($"Uploading... {request.uploadProgress:P0}");
+                    await Task.Yield();
+                }
 
-                        await collection.InsertOneAsync(studentData);
-                        successCount++;
-                        Debug.Log($"Added student: {firstName} {lastName}");
-                        
-                        ShowFeedback($"Processing... ({successCount} added)");
-                    }
-                    catch (Exception ex)
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    string responseText = request.downloadHandler.text;
+                    Debug.Log($"Server response: {responseText}");
+                    
+                    var response = JsonUtility.FromJson<UploadResponse>(responseText);
+                    ShowFeedback($"Successfully uploaded {response.count} students!");
+                    await Task.Delay(1000);
+                    FetchStudents();
+                }
+                else
+                {
+                    Debug.LogError($"Upload failed: {request.error}\nResponse: {request.downloadHandler.text}");
+                    ShowFeedback("Failed to upload file. Please try again.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error uploading file: {ex.Message}");
+            ShowFeedback("Error uploading file. Please try again.");
+        }
+        finally
+        {
+            ResetUploadState();
+        }
+    }
+
+    [Serializable]
+    private class UploadResponse
+    {
+        public string message;
+        public int count;
+    }
+
+    private async Task ProcessCSVFileAsync(string filePath)
+    {
+        try 
+        {
+            // Ensure we're not already processing
+            if (!isProcessing)
+            {
+                Debug.LogError("Process state invalid");
+                return;
+            }
+
+            ShowFeedback("Initializing database connection...");
+            await EnsureDatabaseInitialized();
+            
+            if (!isDatabaseInitialized)
+            {
+                ShowFeedback("Failed to connect to database. Please check your connection.");
+                ResetUploadState();
+                return;
+            }
+
+            ShowFeedback("Reading CSV file...");
+            
+            string content;
+            using (var reader = new StreamReader(filePath))
+            {
+                content = await reader.ReadToEndAsync();
+            }
+            
+            string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Debug.Log($"Read {lines.Length} lines from CSV");
+
+            if (lines.Length <= 1)
+            {
+                ShowFeedback("CSV file is empty or contains only headers");
+                return;
+            }
+
+            var collection = database.GetCollection<BsonDocument>("users");
+            int successCount = 0;
+            
+            // Skip header row
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string[] values = lines[i].Split(',');
+                if (values.Length >= 6)
+                {
+                    string firstName = values[0].Trim();
+                    string lastName = values[1].Trim();
+                    string role = values[2].Trim();
+                    string section = values[3].Trim();
+                    string username = values[4].Trim();
+                    string character = values[5].Trim();
+
+                    if (!string.IsNullOrEmpty(firstName) && !string.IsNullOrEmpty(lastName))
                     {
-                        Debug.LogError($"Error adding student {firstName} {lastName}: {ex.Message}");
+                        try
+                        {
+                            var studentData = new BsonDocument
+                            {
+                                { "FirstName", firstName },
+                                { "LastName", lastName },
+                                { "FullName", $"{firstName} {lastName}" },
+                                { "Role", role },
+                                { "Section", section },
+                                { "Username", username },
+                                { "Character", character },
+                                { "rewards_collected", new BsonArray() }
+                            };
+
+                            await collection.InsertOneAsync(studentData);
+                            successCount++;
+                            Debug.Log($"Added student: {firstName} {lastName}");
+                            
+                            ShowFeedback($"Processing... ({successCount} added)");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"Error adding student {firstName} {lastName}: {ex.Message}");
+                        }
                     }
+                }
+            }
+
+            ShowFeedback($"Successfully added {successCount} students");
+            await Task.Delay(1000); // Short delay before refresh
+            FetchStudents(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error processing CSV: {ex.Message}");
+            ShowFeedback($"Error processing CSV: {ex.Message}");
+        }
+        finally
+        {
+            ResetUploadState();
+        }
+    }
+
+    private async Task EnsureDatabaseInitialized()
+    {
+        if (isDatabaseInitialized) return;
+
+        string connectionString = PlayerPrefs.GetString("MONGO_URI", "");
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            Debug.LogError("MongoDB URI not found in PlayerPrefs!");
+            ShowFeedback("Database configuration missing. Please restart the application.");
+            throw new System.Exception("MongoDB URI not configured");
+        }
+
+        int maxRetries = 3;
+        int currentTry = 0;
+
+        while (!isDatabaseInitialized && currentTry < maxRetries)
+        {
+            try
+            {
+                Debug.Log($"Attempting database connection (attempt {currentTry + 1}/{maxRetries})");
+                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                
+                if (settings.Servers == null || !settings.Servers.Any())
+                {
+                    throw new System.Exception("Invalid MongoDB connection string format");
+                }
+
+                var client = new MongoClient(settings);
+                database = client.GetDatabase("Users");
+
+                // Test the connection
+                var pingCommand = new BsonDocument("ping", 1);
+                await database.RunCommandAsync<BsonDocument>(pingCommand);
+
+                isDatabaseInitialized = true;
+                Debug.Log("✅ Database initialized successfully");
+                ShowFeedback("Connected to database");
+                return;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"❌ Database initialization attempt {currentTry + 1} failed: {ex.Message}");
+                currentTry++;
+                if (currentTry < maxRetries)
+                {
+                    ShowFeedback($"Retrying database connection... ({currentTry}/{maxRetries})");
+                    await Task.Delay(1000);
                 }
             }
         }
 
-        ShowFeedback($"Successfully added {successCount} students");
-        await Task.Delay(1000); // Short delay before refresh
-        FetchStudents(); // Refresh the list
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Error processing CSV: {ex.Message}");
-        ShowFeedback($"Error processing CSV: {ex.Message}");
-    }
-    finally
-    {
-        uploadButton.interactable = true;
-        isUploadInProgress = false;
-    }
-}
-
-
-private class FetchResult
-{
-    public bool Success { get; set; }
-    public string ErrorMessage { get; set; }
-    public List<UserData> Students { get; set; }
-}
-
-private IEnumerator FetchStudentsCoroutine()
-{
-    Debug.Log("Starting to fetch students...");
-
-    if (Application.internetReachability == NetworkReachability.NotReachable)
-    {
-        ShowFeedback("No internet connection. Please check your connection and try again.");
-        yield break;
+        throw new System.Exception("Failed to initialize database after multiple attempts");
     }
 
-    string url = $"{baseUrl}/users";
-    UnityWebRequest request = UnityWebRequest.Get(url);
-    request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
-    request.timeout = 10;
-
-    yield return request.SendWebRequest();
-
-    FetchResult result = ProcessFetchResult(request);
-    
-    if (!result.Success)
+    private class FetchResult
     {
-        ShowFeedback(result.ErrorMessage);
-        request.Dispose();
-        yield break;
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
+        public List<UserData> Students { get; set; }
     }
 
-    ClearExistingRows();
-
-    if (result.Students != null && result.Students.Count > 0)
+    private IEnumerator FetchStudentsCoroutine()
     {
-        foreach (var user in result.Students)
+        Debug.Log("Starting to fetch students...");
+
+        if (Application.internetReachability == NetworkReachability.NotReachable)
         {
-            if (user.Role == "Student" && 
-                !string.IsNullOrEmpty(user.FirstName) && 
-                !string.IsNullOrEmpty(user.LastName))
-            {
-                string fullName = $"{user.FirstName} {user.LastName}";
-                AddRow(fullName, user.Section ?? "Unknown Section");
-                yield return null;
-            }
+            ShowFeedback("No internet connection. Please check your connection and try again.");
+            yield break;
         }
-        ShowFeedback("Students loaded successfully");
-    }
-    else
-    {
-        ShowFeedback("No students found in the database");
-    }
 
-    request.Dispose();
-    UpdateContentHeight();
-    yield return StartCoroutine(DelayedScrollbarRefresh());
-}
-
-private FetchResult ProcessFetchResult(UnityWebRequest request)
-{
-    if (request.result != UnityWebRequest.Result.Success)
-    {
-        return new FetchResult 
-        { 
-            Success = false, 
-            ErrorMessage = $"Server request failed: {request.error}" 
-        };
-    }
-
-    try
-    {
-        string responseContent = request.downloadHandler.text;
-        var students = Newtonsoft.Json.JsonConvert.DeserializeObject<List<UserData>>(responseContent);
-        return new FetchResult 
-        { 
-            Success = true, 
-            Students = students 
-        };
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Error processing response: {ex.Message}");
-        return new FetchResult 
-        { 
-            Success = false, 
-            ErrorMessage = "Error processing server response" 
-        };
-    }
-}
-
-private class RequestResult
-{
-    public bool Success { get; set; }
-    public string ErrorMessage { get; set; }
-    public UnityWebRequest Request { get; set; }
-    public string ResponseData { get; set; }
-}
-
-private RequestResult CreateRequest(string url)
-{
-    try
-    {
-        var request = UnityWebRequest.Get(url);
+        string url = $"{baseUrl}/users";
+        UnityWebRequest request = UnityWebRequest.Get(url);
         request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
         request.timeout = 10;
-        Debug.Log($"Sending request to: {url}");
-        return new RequestResult { Success = true, Request = request };
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Error creating request: {ex.Message}");
-        return new RequestResult { Success = false, ErrorMessage = "Error creating request" };
-    }
-}
 
-private RequestResult ProcessResponse(UnityWebRequest request)
-{
-    try
-    {
-        if (request.result == UnityWebRequest.Result.Success)
+        yield return request.SendWebRequest();
+
+        FetchResult result = ProcessFetchResult(request);
+        
+        if (!result.Success)
         {
-            return new RequestResult 
+            ShowFeedback(result.ErrorMessage);
+            request.Dispose();
+            yield break;
+        }
+
+        ClearExistingRows();
+
+        if (result.Students != null && result.Students.Count > 0)
+        {
+            foreach (var user in result.Students)
+            {
+                if (user.Role == "Student" && 
+                    !string.IsNullOrEmpty(user.FirstName) && 
+                    !string.IsNullOrEmpty(user.LastName))
+                {
+                    string fullName = $"{user.FirstName} {user.LastName}";
+                    AddRow(fullName, user.Section ?? "Unknown Section");
+                    yield return null;
+                }
+            }
+            ShowFeedback("Students loaded successfully");
+        }
+        else
+        {
+            ShowFeedback("No students found in the database");
+        }
+
+        request.Dispose();
+        UpdateContentHeight();
+        yield return StartCoroutine(DelayedScrollbarRefresh());
+    }
+
+    private FetchResult ProcessFetchResult(UnityWebRequest request)
+    {
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            return new FetchResult 
             { 
-                Success = true, 
-                ResponseData = request.downloadHandler.text 
+                Success = false, 
+                ErrorMessage = $"Server request failed: {request.error}" 
             };
         }
-        
-        Debug.LogError($"Request failed: {request.error}");
-        return new RequestResult 
-        { 
-            Success = false, 
-            ErrorMessage = $"Server request failed: {request.error}" 
-        };
-    }
-    catch (Exception ex)
-    {
-        Debug.LogError($"Error processing response: {ex.Message}");
-        return new RequestResult 
-        { 
-            Success = false, 
-            ErrorMessage = "Error processing server response" 
-        };
-    }
-}
 
-private class TaskWrapper<T>
-{
-    public bool Success { get; set; }
-    public T Result { get; set; }
-    public string ErrorMessage { get; set; }
-}
-
-private TaskWrapper<T> RunTask<T>(Task<T> task)  // Fixed: Removed the 's' before 'private'
-{
-    try
-    {
-        task.Wait();
-        return new TaskWrapper<T> { Success = true, Result = task.Result };
-    }
-    catch (Exception ex)
-    {
-        return new TaskWrapper<T> { Success = false, ErrorMessage = ex.Message };
-    }
-}
-
-private IEnumerator SetCharacterForRow(string studentName, TMP_Text characterText)
-{
-    if (characterText == null) yield break;
-
-    var task = GetStudentCharacter(studentName);
-    while (!task.IsCompleted)
-        yield return null;
-
-    var result = RunTask(task);
-    
-    if (result.Success && result.Result != null)
-    {
-        characterText.text = result.Result;
-    }
-}
-
-private IEnumerator SetCharacterText(string studentName, TMP_Text characterText)
-{
-    if (characterText == null) yield break;
-
-    var task = GetStudentCharacter(studentName);
-    while (!task.IsCompleted)
-        yield return null;
-
-    var result = RunTask(task);
-    
-    if (result.Success && result.Result != null)
-    {
-        characterText.text = result.Result;
-    }
-}
-
-private async Task<List<UserData>> DeserializeUsersAsync(string responseContent)
-{
-    return await Task.Run(() =>
-    {
-        return Newtonsoft.Json.JsonConvert.DeserializeObject<List<UserData>>(responseContent);
-    });
-}
-
-private IEnumerator DisplayStudentData(string responseContent)
-{
-    if (string.IsNullOrEmpty(responseContent))
-        yield break;
-
-    ClearExistingRows();
-    Debug.Log($"Raw response: {responseContent}");
-
-    var deserializeTask = DeserializeUsersAsync(responseContent);
-    while (!deserializeTask.IsCompleted)
-        yield return null;
-
-    var result = RunTask(deserializeTask);
-
-    if (result.Success && result.Result != null)
-    {
-        var users = result.Result;
-        foreach (var user in users)
+        try
         {
-            if (user.Role == "Student" && 
-                !string.IsNullOrEmpty(user.FirstName) && 
-                !string.IsNullOrEmpty(user.LastName))
-            {
-                string fullName = $"{user.FirstName} {user.LastName}";
-                AddRow(fullName, user.Section ?? "Unknown Section");
-                yield return null;
-            }
+            string responseContent = request.downloadHandler.text;
+            var students = Newtonsoft.Json.JsonConvert.DeserializeObject<List<UserData>>(responseContent);
+            return new FetchResult 
+            { 
+                Success = true, 
+                Students = students 
+            };
         }
-        ShowFeedback("Students loaded successfully");
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error processing response: {ex.Message}");
+            return new FetchResult 
+            { 
+                Success = false, 
+                ErrorMessage = "Error processing server response" 
+            };
+        }
     }
-    else
+
+    private class RequestResult
     {
-        ShowFeedback("Error loading students: " + (result.ErrorMessage ?? "Unknown error"));
+        public bool Success { get; set; }
+        public string ErrorMessage { get; set; }
+        public UnityWebRequest Request { get; set; }
+        public string ResponseData { get; set; }
     }
-}
+
+    private RequestResult CreateRequest(string url)
+    {
+        try
+        {
+            var request = UnityWebRequest.Get(url);
+            request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
+            request.timeout = 10;
+            Debug.Log($"Sending request to: {url}");
+            return new RequestResult { Success = true, Request = request };
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error creating request: {ex.Message}");
+            return new RequestResult { Success = false, ErrorMessage = "Error creating request" };
+        }
+    }
+
+    private RequestResult ProcessResponse(UnityWebRequest request)
+    {
+        try
+        {
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                return new RequestResult 
+                { 
+                    Success = true, 
+                    ResponseData = request.downloadHandler.text 
+                };
+            }
+            
+            Debug.LogError($"Request failed: {request.error}");
+            return new RequestResult 
+            { 
+                Success = false, 
+                ErrorMessage = $"Server request failed: {request.error}" 
+            };
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error processing response: {ex.Message}");
+            return new RequestResult 
+            { 
+                Success = false, 
+                ErrorMessage = "Error processing server response" 
+            };
+        }
+    }
+
+    private class TaskWrapper<T>
+    {
+        public bool Success { get; set; }
+        public T Result { get; set; }
+        public string ErrorMessage { get; set; }
+    }
+
+    private TaskWrapper<T> RunTask<T>(Task<T> task)  // Fixed: Removed the 's' before 'private'
+    {
+        try
+        {
+            task.Wait();
+            return new TaskWrapper<T> { Success = true, Result = task.Result };
+        }
+        catch (Exception ex)
+        {
+            return new TaskWrapper<T> { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    private IEnumerator SetCharacterForRow(string studentName, TMP_Text characterText)
+    {
+        if (characterText == null) yield break;
+
+        var task = GetStudentCharacter(studentName);
+        while (!task.IsCompleted)
+            yield return null;
+
+        var result = RunTask(task);
+        
+        if (result.Success && result.Result != null)
+        {
+            characterText.text = result.Result;
+        }
+    }
+
+    private IEnumerator SetCharacterText(string studentName, TMP_Text characterText)
+    {
+        if (characterText == null) yield break;
+
+        var task = GetStudentCharacter(studentName);
+        while (!task.IsCompleted)
+            yield return null;
+
+        var result = RunTask(task);
+        
+        if (result.Success && result.Result != null)
+        {
+            characterText.text = result.Result;
+        }
+    }
+
+    private async Task<List<UserData>> DeserializeUsersAsync(string responseContent)
+    {
+        return await Task.Run(() =>
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<List<UserData>>(responseContent);
+        });
+    }
+
+    private IEnumerator DisplayStudentData(string responseContent)
+    {
+        if (string.IsNullOrEmpty(responseContent))
+            yield break;
+
+        ClearExistingRows();
+        Debug.Log($"Raw response: {responseContent}");
+
+        var deserializeTask = DeserializeUsersAsync(responseContent);
+        while (!deserializeTask.IsCompleted)
+            yield return null;
+
+        var result = RunTask(deserializeTask);
+
+        if (result.Success && result.Result != null)
+        {
+            var users = result.Result;
+            foreach (var user in users)
+            {
+                if (user.Role == "Student" && 
+                    !string.IsNullOrEmpty(user.FirstName) && 
+                    !string.IsNullOrEmpty(user.LastName))
+                {
+                    string fullName = $"{user.FirstName} {user.LastName}";
+                    AddRow(fullName, user.Section ?? "Unknown Section");
+                    yield return null;
+                }
+            }
+            ShowFeedback("Students loaded successfully");
+        }
+        else
+        {
+            ShowFeedback("Error loading students: " + (result.ErrorMessage ?? "Unknown error"));
+        }
+    }
 
     private async Task ReadAndUploadExcelFile(string filePath)
     {
@@ -1089,7 +1245,6 @@ private IEnumerator DisplayStudentData(string responseContent)
         catch (Exception ex)
         {
             Debug.LogError($"Error in AddRow: {ex.Message}");
-            LogToScreen($"Failed to add row: {ex.Message}");
         }
     }
 
@@ -1155,7 +1310,6 @@ private IEnumerator DisplayStudentData(string responseContent)
         catch (Exception ex)
         {
             Debug.LogError($"Error in UpdateLayoutAndScroll: {ex.Message}");
-            LogToScreen("Error updating layout");
         }
     }
 
@@ -1402,20 +1556,17 @@ private IEnumerator DisplayStudentData(string responseContent)
     {
         try
         {
-            LogToScreen("Starting to fetch students...");
             string url = $"{baseUrl}/users";
-            
+
             using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
                 request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
-                
-                LogToScreen($"Sending request to: {url}");
+
                 await request.SendWebRequest();
 
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     string responseContent = request.downloadHandler.text;
-                    LogToScreen($"Received response: {responseContent}");
 
                     // Clear existing rows first
                     foreach (GameObject row in rows)
@@ -1434,25 +1585,22 @@ private IEnumerator DisplayStudentData(string responseContent)
                             {
                                 string fullName = $"{student.FirstName} {student.LastName}";
                                 AddRow(fullName, student.Section);
-                                LogToScreen($"Added student: {fullName}");
                             }
                         }
                     }
-                    else
-                    {
-                        LogToScreen("No students found in response");
-                    }
+
                 }
-                else
-                {
-                    LogToScreen($"Request failed: {request.error}");
-                }
+
             }
         }
         catch (Exception ex)
+
         {
-            LogToScreen($"Error: {ex.Message}");
+            Debug.LogError($"Error in FetchStudents: {ex.Message}");
+
+
         }
+
     }
 
     private IEnumerator UpdateUI(List<BsonDocument> students)
@@ -1472,7 +1620,6 @@ private IEnumerator DisplayStudentData(string responseContent)
             ProcessStudent(student);
         }
 
-        LogToScreen($"UI updated with {rows.Count} rows");
     }
 
     private void ProcessStudent(BsonDocument student)
@@ -1487,9 +1634,13 @@ private IEnumerator DisplayStudentData(string responseContent)
         }
         catch (Exception ex)
         {
-            LogToScreen($"Error processing student: {ex.Message}");
+            Debug.LogError($"Error processing student: {ex.Message}");
+
         }
+
+
     }
+
 
 private string[] compoundLastNamePrefixes = new string[] { "De", "Del", "Dela", "De La", "San", "Santa", "Santo" };
 
@@ -1637,6 +1788,8 @@ public async void OnRemoveStudentButtonClick()
         await Task.Run(() => FetchSections());
     }
 
+
+
     private async Task FetchStudentsAsync()
     {
         await Task.Run(() => FetchStudents());
@@ -1645,15 +1798,15 @@ public async void OnRemoveStudentButtonClick()
     private Task<bool> ShowConfirmationDialog(string message)
     {
         var tcs = new TaskCompletionSource<bool>();
-        
+
         // Create confirmation UI elements if they don't exist
         GameObject confirmationPanel = new GameObject("ConfirmationPanel");
         confirmationPanel.AddComponent<RectTransform>();
-        
+
         // Add your confirmation dialog UI logic here
         // For now, we'll just return true
         tcs.SetResult(true);
-        
+
         return tcs.Task;
     }
 
@@ -1686,7 +1839,7 @@ public async void OnRemoveStudentButtonClick()
         }
         catch (Exception ex)
         {
-            LogToScreen($"Error fetching sections: {ex.Message}");
+            Debug.LogError($"Error fetching sections: {ex.Message}");
         }
     }
 
@@ -1739,20 +1892,10 @@ public async void OnRemoveStudentButtonClick()
             refreshButton.onClick.RemoveAllListeners();
             refreshButton.onClick.AddListener(OnRefreshButtonClick);
         }
-        else
-        {
-            LogToScreen("RefreshButton reference is missing!");
-        }
 
-        // Assign debug toggle button listener
-        if (debugToggleButton != null)
-        {
-            debugToggleButton.onClick.RemoveAllListeners();
-            debugToggleButton.onClick.AddListener(ToggleDebugConsole);
-        }
 
         // Check and request permissions for Android
-        #if UNITY_ANDROID
+#if UNITY_ANDROID
         if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
         {
             Permission.RequestUserPermission(Permission.ExternalStorageRead);
@@ -1761,7 +1904,7 @@ public async void OnRemoveStudentButtonClick()
         {
             Permission.RequestUserPermission(Permission.ExternalStorageWrite);
         }
-        #endif
+#endif
     }
 
     // Add this method to check UI setup
@@ -1775,13 +1918,21 @@ public async void OnRemoveStudentButtonClick()
             var contentSizeFitter = tableParent.GetComponent<ContentSizeFitter>();
             var verticalLayoutGroup = tableParent.GetComponent<VerticalLayoutGroup>();
 
-            LogToScreen($"TableParent Setup:" +
-                $"\nPosition: {rectTransform.position}" +
-                $"\nAnchored Position: {rectTransform.anchoredPosition}" +
-                $"\nSize Delta: {rectTransform.sizeDelta}" +
-                $"\nContent Size Fitter: {(contentSizeFitter != null ? "Present" : "Missing")}" +
-                $"\nVertical Layout Group: {(verticalLayoutGroup != null ? "Present" : "Missing")}" +
-                $"\nChild Count: {tableParent.childCount}");
+            // Ensure the vertical layout group is set up correctly
+            if (verticalLayoutGroup != null)
+            {
+                verticalLayoutGroup.childForceExpandHeight = false;
+                verticalLayoutGroup.childAlignment = TextAnchor.UpperCenter;
+                verticalLayoutGroup.childControlWidth = true;
+                verticalLayoutGroup.childForceExpandWidth = true;
+                verticalLayoutGroup.spacing = 5;
+            }
+
+            // Ensure the content size fitter is set up correctly
+            if (contentSizeFitter != null)
+            {
+                contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
         }
     }
 
@@ -1802,40 +1953,7 @@ public async void OnRemoveStudentButtonClick()
 
             var csf = tableParent.GetComponent<ContentSizeFitter>();
             if (csf == null) csf = tableParent.gameObject.AddComponent<ContentSizeFitter>();
-           // csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.verticalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-        }
-    }
-
-    private void LogToScreen(string message)
-    {
-        if (debugConsoleText != null)
-        {
-            // Add timestamp to message
-            string timeStamp = System.DateTime.Now.ToString("HH:mm:ss");
-            string logMessage = $"[{timeStamp}] {message}";
-
-            // Add new line to queue
-            debugLines.Enqueue(logMessage);
-
-            // Remove old lines if we exceed the maximum
-            while (debugLines.Count > MAX_DEBUG_LINES)
-            {
-                debugLines.Dequeue();
-            }
-
-            // Update the text display
-            debugConsoleText.text = string.Join("\n", debugLines.ToArray());
-        }
-    }
-
-    private void ToggleDebugConsole()
-    {
-        if (debugConsolePanel != null)
-        {
-            bool isActive = debugConsolePanel.activeSelf;
-            debugConsolePanel.SetActive(!isActive);
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
         }
     }
 
@@ -1856,18 +1974,6 @@ public async void OnRemoveStudentButtonClick()
         }
     }
 
-    public void SetupDebugConsole()
-    {
-        if (debugConsolePanel != null)
-        {
-            debugConsolePanel.SetActive(false);
-            if (debugToggleButton != null)
-            {
-                debugToggleButton.onClick.AddListener(ToggleDebugConsole);
-            }
-        }
-    }
-
     private void UpdateContentHeight()
     {
         if (tableParent != null)
@@ -1879,27 +1985,24 @@ public async void OnRemoveStudentButtonClick()
 
     private IEnumerator DelayedScrollbarRefresh()
     {
-    Canvas.ForceUpdateCanvases(); 
-    yield return new WaitForEndOfFrame();
-
+        Canvas.ForceUpdateCanvases();
+        yield return new WaitForEndOfFrame();
     }
 }
 
 // Add these classes to handle the JSON response
 [Serializable]
-public class StudentListResponse
-{
-    public UserData[] users;
-}
-
-public static class UnityWebRequestExtensions
-{
-    public static TaskAwaiter<UnityWebRequest> GetAwaiter(this UnityWebRequestAsyncOperation operation)
+    public class StudentListResponse
     {
-        var tcs = new TaskCompletionSource<UnityWebRequest>();
-        operation.completed += asyncOp => tcs.TrySetResult(((UnityWebRequestAsyncOperation)asyncOp).webRequest);
-        return tcs.Task.GetAwaiter();
+        public UserData[] users;
     }
-}
 
-
+    public static class UnityWebRequestExtensions
+    {
+        public static TaskAwaiter<UnityWebRequest> GetAwaiter(this UnityWebRequestAsyncOperation operation)
+        {
+            var tcs = new TaskCompletionSource<UnityWebRequest>();
+            operation.completed += asyncOp => tcs.TrySetResult(((UnityWebRequestAsyncOperation)asyncOp).webRequest);
+            return tcs.Task.GetAwaiter();
+        }
+    }
