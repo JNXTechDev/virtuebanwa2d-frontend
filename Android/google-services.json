@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "261217867269",
+    "firebase_url": "https://vbdb-986de-default-rtdb.firebaseio.com",
+    "project_id": "vbdb-986de",
+    "storage_bucket": "vbdb-986de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:261217867269:android:e6510b4aacd94bbb99ae6c",
+        "android_client_info": {
+          "package_name": "HEllo.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0Xyz2gmkDfwtD90cKckIJ5v6nNidHZRE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:261217867269:android:cc4f9f285f47c45c99ae6c",
+        "android_client_info": {
+          "package_name": "com.DefaultCompany.com.unity.template.mobile2D"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0Xyz2gmkDfwtD90cKckIJ5v6nNidHZRE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:261217867269:android:fd7686f9bdcb2b3599ae6c",
+        "android_client_info": {
+          "package_name": "com.gb14.virtuebanwa2d"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0Xyz2gmkDfwtD90cKckIJ5v6nNidHZRE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
