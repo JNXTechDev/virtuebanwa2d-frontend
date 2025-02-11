@@ -19,6 +19,7 @@ using UnityEngine.Networking;
 using System.Runtime.CompilerServices;
 using ExcelDataReader;
 using System.Data; // For DataSet
+using Newtonsoft.Json;
 
 public class DynamicTable : MonoBehaviour 
 {
@@ -494,15 +495,13 @@ public class DynamicTable : MonoBehaviour
 
     private void InitializeDropdowns()
     {
-        // Initialize character dropdown with default options if needed
-        if (characterDropdown != null && characterDropdown.options.Count == 0)
+        // Initialize character dropdown with only Gir and Boy options
+        if (characterDropdown != null)
         {
             characterDropdown.ClearOptions();
             var characterOptions = new List<string> {
-                "Character1",
-                "Character2",
-                "Character3",
-                // Add more character options as needed
+                "Girl",
+                "Boy"
             };
             characterDropdown.AddOptions(characterOptions);
         }
@@ -1499,13 +1498,6 @@ public class DynamicTable : MonoBehaviour
     {
         try
         {
-            // Check if the database is initialized
-            if (!isDatabaseInitialized)
-            {
-                ShowFeedback("Database is not initialized. Please try again later.");
-                return; // Exit if the database is not initialized
-            }
-
             if (string.IsNullOrEmpty(firstNameInputField.text) || 
                 string.IsNullOrEmpty(lastNameInputField.text) || 
                 string.IsNullOrEmpty(usernameInputField.text))
@@ -1514,36 +1506,55 @@ public class DynamicTable : MonoBehaviour
                 return;
             }
 
-            // Ensure sectionDropdown and characterDropdown have valid options
-            if (sectionDropdown.options.Count == 0 || characterDropdown.options.Count == 0)
-            {
-                ShowFeedback("Please ensure all dropdowns have valid options");
-                return;
-            }
-
-            string firstName = firstNameInputField.text;
-            string lastName = lastNameInputField.text;
-            string username = usernameInputField.text;
+            string firstName = firstNameInputField.text.Trim();
+            string lastName = lastNameInputField.text.Trim();
+        //    string fullName = $"{firstName} {lastName}";
+            string username = usernameInputField.text.Trim(); // Use the actual username input
             string section = sectionDropdown.options[sectionDropdown.value].text;
             string character = characterDropdown.options[characterDropdown.value].text;
 
-            await UploadStudentToMongoDB(firstName, lastName, section, username, "Student", character);
-            Debug.Log($"Student added: {firstName} {lastName} with character {character}");
+            var userData = new Dictionary<string, string>
+            {
+                { "FirstName", firstName },
+                { "LastName", lastName },
+              //  { "FullName", fullName },
+                { "Username", username },
+                { "Section", section },
+                { "Character", character },
+                { "Role", "Student" },
+                { "Password", "defaultPassword" }
+            };
 
-            // Clear input fields
-            firstNameInputField.text = "";
-            lastNameInputField.text = "";
-            usernameInputField.text = "";
+            Debug.Log($"Sending user data: {JsonConvert.SerializeObject(userData)}");
 
-            // Refresh the student list
-            FetchStudents();
+            string jsonData = JsonConvert.SerializeObject(userData);
+            byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
 
-            // Refresh the section dropdown
-            FetchSections();
+            using (UnityWebRequest request = new UnityWebRequest($"{baseUrl}/users", "POST"))
+            {
+                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
 
-            // Close panel and show feedback
-            CloseCreateStudentPanel();
-            ShowFeedback("Student created successfully!");
+                await request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    ShowFeedback("Student created successfully!");
+                    firstNameInputField.text = "";
+                    lastNameInputField.text = "";
+                    usernameInputField.text = "";
+                    CloseCreateStudentPanel();
+                    FetchStudents();
+                    FetchSections();
+                }
+                else
+                {
+                    Debug.LogError($"Failed to create student: {request.downloadHandler.text}");
+                    ShowFeedback("Failed to create student. Please try again.");
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -1814,32 +1825,57 @@ public async void OnRemoveStudentButtonClick()
     {
         try
         {
-            var collection = database.GetCollection<BsonDocument>("users");
-            var filter = Builders<BsonDocument>.Filter.Exists("Section");
-
-            // Fetch all documents with a Section field
-            var documents = await collection.Find(filter).ToListAsync();
-
-            // Use a HashSet to store unique sections
-            HashSet<string> uniqueSections = new HashSet<string>();
-
-            foreach (var doc in documents)
+            string url = $"{baseUrl}/sections";
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
             {
-                if (doc.Contains("Section"))
+                request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
+                request.SetRequestHeader("Content-Type", "application/json");
+                
+                await request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    uniqueSections.Add(doc["Section"].AsString);
+                    string responseText = request.downloadHandler.text;
+                    Debug.Log($"Raw sections response: {responseText}"); // Debug log
+
+                    // Parse sections directly from JSON array
+                    var sections = JsonConvert.DeserializeObject<List<string>>(responseText);
+                    
+                    if (sections != null && sections.Count > 0)
+                    {
+                        sections.Sort(); // Sort sections alphabetically
+                        sectionDropdown.ClearOptions();
+                        var options = new List<string>();
+                        
+                        // Add default option
+                  //      options.Add("Select Section");
+                        // Add all sections
+                        options.AddRange(sections);
+                        
+                        sectionDropdown.AddOptions(options);
+                        Debug.Log($"Loaded {sections.Count} sections");
+                        
+                        // Select "Select Section" by default
+                        sectionDropdown.value = 0;
+                        sectionDropdown.RefreshShownValue();
+                    }
+                    else
+                    {
+                        sectionDropdown.ClearOptions();
+                        sectionDropdown.AddOptions(new List<string> { "No sections available" });
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"Failed to fetch sections: {request.error}");
+                    ShowFeedback("Failed to load sections");
                 }
             }
-
-            // Clear existing options in the dropdown
-            sectionDropdown.ClearOptions();
-
-            // Add unique sections to the dropdown
-            sectionDropdown.AddOptions(uniqueSections.ToList());
         }
         catch (Exception ex)
         {
             Debug.LogError($"Error fetching sections: {ex.Message}");
+            ShowFeedback("Error loading sections");
         }
     }
 
