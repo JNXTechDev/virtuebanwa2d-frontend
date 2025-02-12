@@ -75,7 +75,7 @@ public class DynamicTable : MonoBehaviour
         FiveStar,
         GoldenStar,
         PinkShirt,
-        BlueShirt
+        StarShirt
     }
 
     private RewardType selectedReward; // Store the selected reward type
@@ -95,11 +95,16 @@ public class DynamicTable : MonoBehaviour
         selectedStudentName = studentName;
 
         // Update the UI
-        studentNameText.text = studentName; // Set the student name
-        messageInputField.text = ""; // Clear the message input field
-        UpdatePreviewRewardsBox(reward); // Update the reward image
+        studentNameText.text = studentName;
+        messageInputField.text = "";
+        UpdatePreviewRewardsBox(reward);
 
-        sendRewardsPanel.SetActive(true); // Open the SendRewardsPanel
+        // Hide feedback panel and show send rewards panel
+        if (FeedbackPanel != null)
+        {
+            FeedbackPanel.SetActive(false);
+        }
+        sendRewardsPanel.SetActive(true);
     }
 
     public void CloseSendRewardsPanel()
@@ -109,81 +114,116 @@ public class DynamicTable : MonoBehaviour
 
     private void UpdatePreviewRewardsBox(RewardType reward)
     {
-        // Load the appropriate image for the selected reward
-        string imagePath = $"Rewards/{reward.ToString()}"; // Assuming images are stored in a "Rewards" folder
-        Sprite rewardSprite = Resources.Load<Sprite>(imagePath);
+        try
+        {
+            // Update sprite
+            string imagePath = reward.ToString(); // Just use the enum name directly
+            Sprite rewardSprite = Resources.Load<Sprite>($"Rewards/{imagePath}");
 
-        if (rewardSprite != null)
-        {
-            previewRewardsBoxImg.sprite = rewardSprite; // Update the Image's Sprite
+            if (rewardSprite != null)
+            {
+                if (previewRewardsBoxImg != null)
+                {
+                    previewRewardsBoxImg.sprite = rewardSprite;
+                }
+                else
+                {
+                    Debug.LogError("previewRewardsBoxImg reference is missing!");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"Reward image not found: Rewards/{imagePath}");
+            }
+
+            // Update texts
+            if (studentNameText != null)
+            {
+                studentNameText.text = selectedStudentName;
+            }
+
+            if (messageInputField != null)
+            {
+                messageInputField.text = "";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Debug.LogError($"Reward image not found: {imagePath}");
+            Debug.LogError($"Error in UpdatePreviewRewardsBox: {ex.Message}");
         }
     }
 
     public async void SendRewards()
     {
+        if (isProcessing)
+        {
+            Debug.Log("Already processing a reward request");
+            return;
+        }
+
         try
         {
-            // Check if the database is initialized
-            if (!isDatabaseInitialized)
+            isProcessing = true;
+            Debug.Log($"Starting SendRewards process for student: {selectedStudentName}");
+
+            // Validate required data
+            if (string.IsNullOrEmpty(selectedStudentName))
             {
-                ShowFeedback("Database is not initialized. Please try again later.");
-                return; // Exit if the database is not initialized
-            }
-
-            var collection = database.GetCollection<BsonDocument>("users");
-
-            // Fetch the student's full details from the database using FullName
-            var filter = Builders<BsonDocument>.Filter.Eq("FullName", selectedStudentName);
-
-            Debug.Log($"Filter used: {filter}");
-
-            // Check if the student exists in the database
-            var student = await collection.Find(filter).FirstOrDefaultAsync();
-            if (student == null)
-            {
-                Debug.LogError($"Student not found in database: {selectedStudentName}");
-                ShowFeedback("Student not found in the database.");
+                Debug.LogError("No student selected");
+                ShowFeedback("No student selected");
                 return;
             }
 
-            // Extract FirstName and LastName from the database document
-            string firstName = student.GetValue("FirstName").AsString;
-            string lastName = student.GetValue("LastName").AsString;
-
-            Debug.Log($"Found student - FirstName: {firstName}, LastName: {lastName}");
-
-            // Create a reward document to save in the database with Philippine time
-            DateTime utcNow = DateTime.UtcNow;
-            DateTime philippineTime = utcNow.AddHours(8);
-            string philippineTimeString = philippineTime.ToString("yyyy-MM-dd hh:mm:ss tt");
-
-            var rewardDocument = new BsonDocument
+            if (string.IsNullOrEmpty(messageInputField?.text))
             {
-                { "reward", selectedReward.ToString() },
-                { "message", messageInputField.text },
-                { "date", philippineTimeString } // Use human-readable Philippine Time
-            };
+                Debug.LogError("Message is empty");
+                ShowFeedback("Please enter a message");
+                return;
+            }
 
-            // Update the student's document in the database
-            var update = Builders<BsonDocument>.Update.Push("rewards_collected", rewardDocument);
-            await collection.UpdateOneAsync(filter, update);
+            // Send reward using HTTP request instead of MongoDB direct access
+            using (var request = new UnityWebRequest($"{baseUrl}/users/rewards", "POST"))
+            {
+                var rewardData = new Dictionary<string, string>
+                {
+                    { "fullName", selectedStudentName },
+                    { "reward", selectedReward.ToString() },
+                    { "message", messageInputField.text }
+                };
 
-            Debug.Log($"Reward sent to {selectedStudentName}");
+                string jsonData = JsonConvert.SerializeObject(rewardData);
+                byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
 
-            // Show feedback message
-            ShowFeedback("Reward sent successfully!");
+                request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
 
-            // Close the SendRewardsPanel and other panels after 3 seconds
-            StartCoroutine(ClosePanelsAfterDelay(3f));
+                Debug.Log($"Sending reward data: {jsonData}");
+                await request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    Debug.Log($"Reward successfully sent to {selectedStudentName}");
+                    ShowFeedback("Reward sent successfully!");
+                    StartCoroutine(ClosePanelsAfterDelay(3f));
+                }
+                else
+                {
+                    Debug.LogError($"Failed to send reward: {request.error}\nResponse: {request.downloadHandler.text}");
+                    ShowFeedback("Failed to send reward. Please try again.");
+                }
+            }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error sending rewards: {ex.Message}");
+            Debug.LogError($"Error in SendRewards: {ex.Message}\nStack trace: {ex.StackTrace}");
             ShowFeedback("Error sending reward. Please try again.");
+        }
+        finally
+        {
+            isProcessing = false;
+            Debug.Log("SendRewards process completed");
         }
     }
 
@@ -191,27 +231,42 @@ public class DynamicTable : MonoBehaviour
     {
         if (FeedbackPanel != null && FeedbackText != null)
         {
-            FeedbackText.text = message; // Set the feedback message
-            FeedbackPanel.SetActive(true); // Activate the FeedbackPanel
-        }
-        else
-        {
-            Debug.LogError("FeedbackPanel or FeedbackText reference is missing!");
+            // Always show feedback when sending rewards successfully
+            if (message.Contains("Reward sent successfully"))
+            {
+                FeedbackText.text = message;
+                FeedbackPanel.SetActive(true);
+                return;
+            }
+
+            // For other messages, don't show if SendRewardsPanel is active
+            if (sendRewardsPanel != null && sendRewardsPanel.activeSelf)
+            {
+                Debug.Log($"Feedback message (not shown): {message}");
+                return;
+            }
+
+            FeedbackText.text = message;
+            FeedbackPanel.SetActive(true);
         }
     }
 
     private IEnumerator ClosePanelsAfterDelay(float delay)
     {
-        // Wait for the specified delay
         yield return new WaitForSeconds(delay);
 
-        // Close the SendRewardsPanel and other panels
+        // Close panels first
         CloseSendRewardsPanel();
-        CloseViewRewardsPanel(); // Close the rewards panel if needed
+        CloseViewRewardsPanel();
 
-        // Hide the FeedbackPanel after closing panels
-        if (FeedbackPanel != null)
+        // Then show feedback
+        if (FeedbackPanel != null && FeedbackText != null)
         {
+            FeedbackText.text = "Reward sent successfully!";
+            FeedbackPanel.SetActive(true);
+            
+            // Hide feedback after delay
+            yield return new WaitForSeconds(2f);
             FeedbackPanel.SetActive(false);
         }
     }
@@ -225,6 +280,18 @@ public class DynamicTable : MonoBehaviour
         {
             Application.logMessageReceived += HandleLog;
 
+            // Get database reference from MongoDBConfig
+            if (MongoDBConfig.Instance != null && MongoDBConfig.Instance.IsInitialized)
+            {
+                database = MongoDBConfig.Instance.Database;
+                isDatabaseInitialized = true;
+            }
+            else
+            {
+                Debug.LogError("MongoDBConfig not initialized!");
+                ShowFeedback("Database connection failed. Please restart the application.");
+            }
+
             // Assign button listeners
             AssignButtonListeners();
 
@@ -234,86 +301,11 @@ public class DynamicTable : MonoBehaviour
         catch (Exception ex)
         {
             Debug.LogError($"Critical error in Start: {ex.Message}\n{ex.StackTrace}");
+            ShowFeedback("Error initializing application");
         }
     }
 
     private bool isDatabaseInitialized = false;
-
-    private void InitializeMongoDB()
-    {
-        try
-        {
-            // Get connection string from PlayerPrefs instead of environment variable
-            var connectionString = PlayerPrefs.GetString("MONGO_URI", "");
-            
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                Debug.LogError("MongoDB initialization failed: MONGO_URI is not set in PlayerPrefs");
-                ShowFeedback("Database configuration missing. Please check settings.");
-                return;
-            }
-
-            var settings = MongoClientSettings.FromConnectionString(connectionString);
-            
-            // Ensure the server list is not empty
-            if (settings.Servers.Count() == 0)
-            {
-                Debug.LogError("MongoDB initialization failed: List of configured name servers must not be empty.");
-                ShowFeedback("Invalid database configuration.");
-                return;
-            }
-
-            var client = new MongoClient(settings);
-            database = client.GetDatabase("Users");
-
-            // Verify connection asynchronously
-            StartCoroutine(VerifyDatabaseConnection());
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"MongoDB initialization failed: {ex.Message}");
-            database = null;
-            isDatabaseInitialized = false;
-            ShowFeedback("Database connection failed. Please check your internet connection.");
-        }
-    }
-
-    private IEnumerator VerifyDatabaseConnection()
-    {
-        if (database == null)
-        {
-            Debug.LogError("Database is null during verification");
-            isDatabaseInitialized = false;
-            ShowFeedback("Database connection failed.");
-            yield break;
-        }
-
-        var pingCommand = new BsonDocument("ping", 1);
-        var pingTask = database.RunCommandAsync<BsonDocument>(pingCommand);
-        
-        // Move the yield outside of try-catch
-        while (!pingTask.IsCompleted)
-        {
-            yield return null;
-        }
-
-        try
-        {
-            if (pingTask.Exception != null)
-                throw pingTask.Exception;
-
-            Debug.Log("MongoDB connection verified successfully");
-            isDatabaseInitialized = true;
-            ShowFeedback("Database connected successfully.");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"MongoDB verification failed: {ex.Message}");
-            database = null;
-            isDatabaseInitialized = false;
-            ShowFeedback("Database connection failed. Please check your connection.");
-        }
-    }
 
     private bool SetupUIComponentsSafely()
     {
@@ -734,7 +726,7 @@ public class DynamicTable : MonoBehaviour
                 content = await reader.ReadToEndAsync();
             }
             
-            string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries); // Fixed: Changed split to Split
             Debug.Log($"Read {lines.Length} lines from CSV");
 
             if (lines.Length <= 1)
@@ -869,6 +861,12 @@ public class DynamicTable : MonoBehaviour
     {
         Debug.Log("Starting to fetch students...");
 
+        // Hide feedback panel at the start of fetching
+        if (FeedbackPanel != null)
+        {
+            FeedbackPanel.SetActive(false);
+        }
+
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
             ShowFeedback("No internet connection. Please check your connection and try again.");
@@ -906,7 +904,7 @@ public class DynamicTable : MonoBehaviour
                     yield return null;
                 }
             }
-            ShowFeedback("Students loaded successfully");
+            Debug.Log("Students loaded successfully");
         }
         else
         {
@@ -1474,23 +1472,51 @@ public class DynamicTable : MonoBehaviour
 
     public void OnRewardButtonClick(int rewardType)
     {
-        // Get the selected student's name from the ViewStudentPanel
-        string studentName = viewStudentPanel.transform.Find("StudentNameText").GetComponent<TMP_Text>().text;
+        Debug.Log($"Reward button clicked: {rewardType}");
+
+        if (sendRewardsPanel == null)
+        {
+            Debug.LogError("SendRewardsPanel reference is missing!");
+            return;
+        }
+
+        if (viewStudentPanel == null)
+        {
+            Debug.LogError("ViewStudentPanel reference is missing!");
+            return;
+        }
+
+        var studentNameText = viewStudentPanel.transform.Find("StudentNameText")?.GetComponent<TMP_Text>();
+        if (studentNameText == null)
+        {
+            Debug.LogError("StudentNameText component not found!");
+            return;
+        }
+
+        string studentName = studentNameText.text;
+        Debug.Log($"Selected student: {studentName}");
 
         if (!string.IsNullOrEmpty(studentName))
         {
-            OpenSendRewardsPanel((RewardType)rewardType, studentName);
-            CloseViewRewardsPanel(); // Close the ViewRewardsPanel when a reward is selected
+            selectedStudentName = studentName;
+            selectedReward = (RewardType)rewardType;
 
-            // Hide the FeedbackPanel when a reward is selected
-            if (FeedbackPanel != null)
-            {
-                FeedbackPanel.SetActive(false);
-            }
+            // First update the UI elements
+            UpdatePreviewRewardsBox((RewardType)rewardType);
+
+            // Then explicitly show/hide panels
+            if (viewRewardsPanel != null) viewRewardsPanel.SetActive(false);
+            sendRewardsPanel.SetActive(true);
+            
+            // Force update canvas to ensure UI refreshes
+            Canvas.ForceUpdateCanvases();
+
+            Debug.Log($"SendRewardsPanel active state: {sendRewardsPanel.activeSelf}");
         }
         else
         {
             Debug.LogError("No student selected!");
+            ShowFeedback("Please select a student first");
         }
     }
 
@@ -1886,61 +1912,87 @@ public async void OnRemoveStudentButtonClick()
 
     private void AssignButtonListeners()
     {
-        // Remove existing listeners to prevent multiple calls
-        searchButton.onClick.RemoveAllListeners();
-        searchButton.onClick.AddListener(SearchStudents);
-
-        addStudentButton.onClick.RemoveAllListeners();
-        addStudentButton.onClick.AddListener(ShowCreateStudentPanel);
-
-        closeCreateStudentButton.onClick.RemoveAllListeners();
-        closeCreateStudentButton.onClick.AddListener(CloseCreateStudentPanel);
-
-        createStudentButton.onClick.RemoveAllListeners();
-        createStudentButton.onClick.AddListener(CreateStudent);
-
-        uploadButton.onClick.RemoveAllListeners();
-        uploadButton.onClick.AddListener(OnUploadButtonClick);
-
-        // Assign listeners for rewards panel
-        sendRewardsButton.onClick.RemoveAllListeners();
-        sendRewardsButton.onClick.AddListener(ShowViewRewardsPanel);
-
-        closeRewardsPanelButton.onClick.RemoveAllListeners();
-        closeRewardsPanelButton.onClick.AddListener(CloseViewRewardsPanel);
-
-        sendRewardsConfirmButton.onClick.RemoveAllListeners();
-        sendRewardsConfirmButton.onClick.AddListener(SendRewards);
-
-        closeSendRewardsButton.onClick.RemoveAllListeners();
-        closeSendRewardsButton.onClick.AddListener(CloseSendRewardsPanel);
-
-        // Add listener for remove student button
-        if (removeStudentButton != null)
+        try 
         {
-            removeStudentButton.onClick.RemoveAllListeners();
-            removeStudentButton.onClick.AddListener(OnRemoveStudentButtonClick);
-        }
+            Debug.Log("Assigning button listeners...");
+            
+            // Clear all existing listeners first
+            if (sendRewardsConfirmButton != null)
+            {
+                sendRewardsConfirmButton.onClick.RemoveAllListeners();
+                // Add listener only once
+                sendRewardsConfirmButton.onClick.AddListener(() => 
+                {
+                    Debug.Log("Send rewards button clicked");
+                    if (!isProcessing)
+                    {
+                        isProcessing = true;
+                        SendRewards();
+                    }
+                    else
+                    {
+                        Debug.Log("Already processing a request");
+                    }
+                });
+            }
 
-        // Update refresh button listener
-        if (refreshButton != null)
-        {
-            refreshButton.onClick.RemoveAllListeners();
-            refreshButton.onClick.AddListener(OnRefreshButtonClick);
-        }
+            // Remove existing listeners to prevent multiple calls
+            searchButton.onClick.RemoveAllListeners();
+            searchButton.onClick.AddListener(SearchStudents);
+
+            addStudentButton.onClick.RemoveAllListeners();
+            addStudentButton.onClick.AddListener(ShowCreateStudentPanel);
+
+            closeCreateStudentButton.onClick.RemoveAllListeners();
+            closeCreateStudentButton.onClick.AddListener(CloseCreateStudentPanel);
+
+            createStudentButton.onClick.RemoveAllListeners();
+            createStudentButton.onClick.AddListener(CreateStudent);
+
+            uploadButton.onClick.RemoveAllListeners();
+            uploadButton.onClick.AddListener(OnUploadButtonClick);
+
+            // Assign listeners for rewards panel
+            sendRewardsButton.onClick.RemoveAllListeners();
+            sendRewardsButton.onClick.AddListener(ShowViewRewardsPanel);
+
+            closeRewardsPanelButton.onClick.RemoveAllListeners();
+            closeRewardsPanelButton.onClick.AddListener(CloseViewRewardsPanel);
+
+            closeSendRewardsButton.onClick.RemoveAllListeners();
+            closeSendRewardsButton.onClick.AddListener(CloseSendRewardsPanel);
+
+            // Add listener for remove student button
+            if (removeStudentButton != null)
+            {
+                removeStudentButton.onClick.RemoveAllListeners();
+                removeStudentButton.onClick.AddListener(OnRemoveStudentButtonClick);
+            }
+
+            // Update refresh button listener
+            if (refreshButton != null)
+            {
+                refreshButton.onClick.RemoveAllListeners();
+                refreshButton.onClick.AddListener(OnRefreshButtonClick);
+            }
 
 
-        // Check and request permissions for Android
-#if UNITY_ANDROID
-        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
-        {
-            Permission.RequestUserPermission(Permission.ExternalStorageRead);
+            // Check and request permissions for Android
+    #if UNITY_ANDROID
+            if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
+            {
+                Permission.RequestUserPermission(Permission.ExternalStorageRead);
+            }
+            if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
+            {
+                Permission.RequestUserPermission(Permission.ExternalStorageWrite);
+            }
+    #endif
         }
-        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
+        catch (Exception ex)
         {
-            Permission.RequestUserPermission(Permission.ExternalStorageWrite);
+            Debug.LogError($"Error in AssignButtonListeners: {ex.Message}");
         }
-#endif
     }
 
     // Add this method to check UI setup
