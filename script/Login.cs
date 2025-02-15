@@ -21,6 +21,10 @@ public class Login : MonoBehaviour
     public GameObject loginBorderStudent;
     public GameObject loginBorderTeacherAdmin;
 
+    // Add these UI references
+    public GameObject NoticeMessageBorder;
+    public TMP_Text NoticeMessageText;
+
     // Base URL for the API
     private const string baseUrl = "https://vbdb.onrender.com/api";
   //    private const string baseUrl = "http://192.168.1.12:5000/api"; // Updated URL
@@ -29,6 +33,12 @@ public class Login : MonoBehaviour
 
     void Start()
     {
+        // Hide NoticeMessageBorder initially
+        if (NoticeMessageBorder != null)
+        {
+            NoticeMessageBorder.SetActive(false);
+        }
+
         // Check database configuration first
         if (string.IsNullOrEmpty(PlayerPrefs.GetString("MONGO_URI", "")))
         {
@@ -122,24 +132,54 @@ public class Login : MonoBehaviour
 
                 // Send the login request
                 HttpResponseMessage response = await client.PostAsync($"{baseUrl}/login", content);
+                string responseContent = await response.Content.ReadAsStringAsync();
+                Debug.Log($"Server response: {responseContent}");
+
+                var errorResponse = JsonUtility.FromJson<ErrorResponse>(responseContent);
+                
+                // Check for approval status messages first
+                if (errorResponse != null && !string.IsNullOrEmpty(errorResponse.message))
+                {
+                    if (responseContent.Contains("pending approval"))
+                    {
+                        ShowNoticeMessage("Your account is pending admin approval. Please wait for approval before logging in.");
+                        return;
+                    }
+                    else if (responseContent.Contains("rejected"))
+                    {
+                        ShowNoticeMessage("Your account registration has been rejected. Please contact an administrator.");
+                        return;
+                    }
+                }
 
                 if (response.IsSuccessStatusCode)
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    Debug.Log($"Received login response: {responseContent}");
-
                     // Deserialize the response
                     var responseData = JsonUtility.FromJson<LoginResponseData>(responseContent);
 
                     // Check if deserialization succeeded
                     if (responseData == null || responseData.user == null)
                     {
-                        feedbackText.text = "Failed to parse user data.";
-                        Debug.LogError("Failed to parse user data.");
+                        ShowFeedback("Failed to parse user data.");
                         return;
                     }
 
                     Debug.Log($"Deserialized user data: Username={responseData.user.Username}, Role={responseData.user.Role}");
+
+                    // Check for teacher approval status
+                    if (responseData.user.Role == "Teacher")
+                    {
+                        if (responseData.user.AdminApproval == "Pending")
+                        {
+                            ShowNoticeMessage("Your account is pending admin approval. Please wait for approval before logging in.");
+                            return;
+                        }
+                        else if (responseData.user.AdminApproval == "Rejected")
+                        {
+                            ShowNoticeMessage("Your account registration has been rejected. Please contact an administrator.");
+                            return;
+                        }
+                    }
 
                     // Check if the user is a student (if logging in as a student)
                     if (password == null && responseData.user.Role != "Student")
@@ -167,10 +207,8 @@ public class Login : MonoBehaviour
                 }
                 else
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
                     feedbackText.text = "Invalid username or password.";
                     Debug.LogError($"Login Failed: {response.ReasonPhrase}. Response: {responseContent}");
-                    Debug.Log($"Feedback Text: {feedbackText.text}");
                 }
             }
             catch (Exception ex)
@@ -181,9 +219,56 @@ public class Login : MonoBehaviour
             }
         }
     }
+
+    private void ShowNoticeMessage(string message)
+    {
+        Debug.Log($"Attempting to show notice message: {message}");
+        
+        // Hide all login panels first
+        loginBorderStudent?.SetActive(false);
+        loginBorderTeacherAdmin?.SetActive(false);
+        loginRoleSelectionBorder?.SetActive(false);
+
+        // Show notice message
+        if (NoticeMessageBorder != null && NoticeMessageText != null)
+        {
+            NoticeMessageText.text = message;
+            NoticeMessageBorder.SetActive(true);
+            Debug.Log($"Notice message panel active: {NoticeMessageBorder.activeSelf}");
+        }
+        else
+        {
+            Debug.LogError("NoticeMessageBorder or NoticeMessageText is not assigned!");
+        }
+    }
+
+    public void OnExitButtonClick()
+    {
+        SceneManager.LoadScene("CreateorLogin");
+    }
+    private void ShowFeedback(string message)
+    {
+        if (feedbackText != null)
+        {
+            feedbackText.text = message;
+        }
+        else
+        {
+            Debug.LogWarning($"FeedbackText is null. Message was: {message}");
+        }
+    }
+
+    // Add this for error response parsing
+    [Serializable]
+    private class ErrorResponse
+    {
+        public string message;
+        public string status;
+    }
 }
-    // Define the LoginRequestData class for serialization
-    [System.Serializable]
+
+// Define the LoginRequestData class for serialization
+[System.Serializable]
 public class LoginRequestData
 {
     public string Username;
