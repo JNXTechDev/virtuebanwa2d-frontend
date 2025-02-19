@@ -224,6 +224,9 @@ public class DynamicTable : MonoBehaviour
         try
         {
             Application.logMessageReceived += HandleLog;
+            
+            // Initialize MongoDB
+            InitializeMongoDB();
 
             // Assign button listeners
             AssignButtonListeners();
@@ -1920,8 +1923,6 @@ public async void OnRemoveStudentButtonClick()
         closeRewardsPanelButton.onClick.RemoveAllListeners();
         closeRewardsPanelButton.onClick.AddListener(CloseViewRewardsPanel);
 
-        sendRewardsConfirmButton.onClick.RemoveAllListeners();
-        sendRewardsConfirmButton.onClick.AddListener(SendRewards);
 
         closeSendRewardsButton.onClick.RemoveAllListeners();
         closeSendRewardsButton.onClick.AddListener(CloseSendRewardsPanel);
