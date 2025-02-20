@@ -2,42 +2,48 @@ using UnityEngine;
 
 public class CameraFollow : MonoBehaviour
 {
-    public Transform playerTransform;
-    public Vector3 cameraOffset;
-    public float smoothSpeed = 0.125f;
+    public float followSpeed = 2f;  // Speed at which the camera follows the player
+    public float yOffset = 1f;      // Vertical offset for the camera
+    public Transform boyTransform;   // Reference to the Boy sprite's transform
+    public Transform girlTransform;   // Reference to the Girl sprite's transform
+
+    private Transform target;        // The target (player) to follow
+    private Vector3 velocity = Vector3.zero; // For SmoothDamp
 
     void Start()
     {
-        // Ensure the playerTransform is set based on the selected character
-        if (UserData.CurrentUser != null)
+        // Initialize camera position
+        SetTarget();
+    }
+
+    void LateUpdate()
+    {
+        if (target != null)
         {
-            string character = UserData.CurrentUser.Character; // Access Character through CurrentUser
-            if (character == "Boy")
-            {
-                playerTransform = GameObject.Find("BoySprite").transform;
-            }
-            else if (character == "Girl")
-            {
-                playerTransform = GameObject.Find("GirlSprite").transform;
-            }
-            else
-            {
-                Debug.LogWarning("Character data not found or is invalid.");
-            }
-        }
-        else
-        {
-            Debug.LogError("UserData.CurrentUser is not set.");
+            // Smoothly move the camera towards the target position
+            Vector3 targetPos = new Vector3(target.position.x, target.position.y + yOffset, transform.position.z);
+            transform.position = Vector3.SmoothDamp(transform.position, targetPos, ref velocity, followSpeed);
         }
     }
 
-    void Update()
+    // Set the target based on the active character
+    public void SetTarget()
     {
-        if (playerTransform != null)
+        string character = UserProfile.CurrentUser.Character;
+        
+        if (character == "Boy" && boyTransform != null)
         {
-            Vector3 desiredPosition = playerTransform.position + cameraOffset;
-            Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
-            transform.position = new Vector3(smoothedPosition.x, smoothedPosition.y, transform.position.z);
+            target = boyTransform;
+            Debug.Log("Camera target set to Boy.");
+        }
+        else if (character == "Girl" && girlTransform != null)
+        {
+            target = girlTransform;
+            Debug.Log("Camera target set to Girl.");
+        }
+        else
+        {
+            Debug.LogWarning($"Character not recognized or transform missing. Character: {character}");
         }
     }
 }

@@ -13,67 +13,130 @@ public class CreateAccountHandler : MonoBehaviour
     public TMP_Dropdown roleDropdown; // Dropdown for Role selection
     public TMP_Text feedbackText; // For displaying feedback messages
 
+    public TMP_InputField firstNameInput;
+    public TMP_InputField lastNameInput;
+    public TMP_InputField employeeIDInput;
+    public TMP_InputField teacherUsernameInput;
+    public TMP_InputField teacherPasswordInput;
+    
+    // UI panels
+    public GameObject signUpBorder;
+    public GameObject noticeMessageBorder;
+    public TMP_Text noticeMessageText;
+
     // Base URL for the API
     //  private const string baseUrl = "http://192.168.1.11:5000/api"; // Updated URL
     private const string baseUrl = "https://vbdb.onrender.com/api";
 
     public void OnCreateAccountButtonClicked()
     {
-        string username = usernameInput.text.Trim(); // Use Username
-        string password = passwordInput.text;
-        string selectedRole = roleDropdown.options[roleDropdown.value].text; // Use Role
+        string firstName = firstNameInput.text.Trim();
+        string lastName = lastNameInput.text.Trim();
+        string employeeID = employeeIDInput.text.Trim();
+        string username = teacherUsernameInput.text.Trim();
+        string password = teacherPasswordInput.text.Trim();
 
-        if (string.IsNullOrEmpty(username) || username.Contains(" ")) // Check for Username
+        if (ValidateInputs(firstName, lastName, employeeID, username, password))
+        {
+            CreateTeacherAccount(firstName, lastName, employeeID, username, password);
+        }
+    }
+
+    private bool ValidateInputs(string firstName, string lastName, string employeeID, string username, string password)
+    {
+        if (string.IsNullOrEmpty(firstName) || string.IsNullOrEmpty(lastName))
+        {
+            feedbackText.text = "Please enter your full name.";
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(employeeID))
+        {
+            feedbackText.text = "Employee ID is required.";
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(username) || username.Contains(" "))
         {
             feedbackText.text = "Username cannot be empty or contain spaces.";
-            return;
+            return false;
         }
 
         if (string.IsNullOrEmpty(password) || password.Length < 6)
         {
-            feedbackText.text = "Password cannot be empty and must be at least 6 characters.";
-            return;
+            feedbackText.text = "Password must be at least 6 characters.";
+            return false;
         }
 
-        // Create the account
-        CreateAccount(username, password, selectedRole);
+        return true;
     }
 
-    private async void CreateAccount(string username, string password, string role)
+    private async void CreateTeacherAccount(string firstName, string lastName, string employeeID, string username, string password)
     {
         using (HttpClient client = new HttpClient())
         {
             try
             {
-                // Prepare the request body using the UserData class
-                var userData = new UserData { Username = username, Password = password, Role = role };
+                var userData = new TeacherData
+                {
+                    FirstName = firstName,
+                    LastName = lastName,
+                    EmployeeID = employeeID,
+                    Username = username,
+                    Password = password,
+                    Role = "Teacher",
+                    AdminApproval = "Pending",
+                    Character = "Teacher"
+                };
+
                 string json = JsonUtility.ToJson(userData);
+                Debug.Log($"Sending teacher data: {json}");
+
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                // Log the JSON being sent
-                Debug.Log($"Sending JSON: {json}");
+                // Make sure we have the correct Content-Type header
+                if (!content.Headers.Contains("Content-Type"))
+                {
+                    content.Headers.Add("Content-Type", "application/json");
+                }
 
-                // Send POST request to the create user endpoint
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/users", content);
+                // Add error handling for the URL
+                string url = $"{baseUrl}/users/teacher";
+                Debug.Log($"Sending request to: {url}");
+
+                HttpResponseMessage response = await client.PostAsync(url, content);
+                string responseContent = await response.Content.ReadAsStringAsync();
+                Debug.Log($"Response status: {response.StatusCode}");
+                Debug.Log($"Response content: {responseContent}");
 
                 if (response.IsSuccessStatusCode)
                 {
-                    feedbackText.text = "Account created successfully!";
-                    Debug.Log("Account created successfully!");
+                    ShowNoticeMessage();
                 }
                 else
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    feedbackText.text = $"Error creating account: {response.ReasonPhrase}";
-                    Debug.LogError($"Account creation failed: {response.ReasonPhrase}. Response: {responseContent}");
+                    feedbackText.text = $"Error: {response.StatusCode} - {responseContent}";
+                    Debug.LogError($"Account creation failed: {responseContent}");
                 }
             }
             catch (Exception ex)
             {
-                feedbackText.text = "Error connecting to the server.";
-                Debug.LogError($"Error during account creation: {ex.Message}");
+                feedbackText.text = $"Error: {ex.Message}";
+                Debug.LogError($"Network error: {ex}");
             }
         }
+    }
+
+    private void ShowNoticeMessage()
+    {
+        signUpBorder.SetActive(false);
+        noticeMessageBorder.SetActive(true);
+        noticeMessageText.text = "Your registration request has been submitted! Please wait for admin approval.";
+    }
+
+    public void OnExitButtonClick()
+    {
+        SceneManager.LoadScene("CreateorLogin");
     }
 
     private void RedirectToSceneBasedOnRole(string role)
@@ -114,4 +177,17 @@ public class CreateAccountHandler : MonoBehaviour
         }
         return false;
     }
+}
+
+[Serializable]
+public class TeacherData
+{
+    public string FirstName;
+    public string LastName;
+    public string EmployeeID;
+    public string Username;
+    public string Password;
+    public string Role;
+    public string AdminApproval;
+    public string Character;  // Add this field
 }

@@ -6,8 +6,14 @@ public class AudioManager : MonoBehaviour
     private static AudioManager instance;
     private AudioSource audioSource;
 
-    public AudioClip defaultMusic; // Music for general scenes
-    public AudioClip neneMainviewMusic; // Music for "nene mainview" scene
+    [Header("Background Music")]
+    public AudioClip menuMusic; // For intro, createorlogin, create, login scenes
+    public AudioClip playSceneMusic; // For play scene only
+    public AudioClip gameplayMusic; // For nene mainview scene
+
+    [Header("Audio Settings")]
+    [Range(0f, 1f)]
+    public float musicVolume = 0.5f;
 
     private void Awake()
     {
@@ -15,19 +21,34 @@ public class AudioManager : MonoBehaviour
         {
             instance = this;
             DontDestroyOnLoad(gameObject);
-
-            // Check if AudioSource exists, if not, add it
-            audioSource = GetComponent<AudioSource>();
-            if (audioSource == null)
-            {
-                audioSource = gameObject.AddComponent<AudioSource>();
-            }
-
-            audioSource.loop = true; // Ensure the audio loops
+            SetupAudioSource();
         }
         else
         {
             Destroy(gameObject);
+        }
+    }
+
+    private void SetupAudioSource()
+    {
+        audioSource = GetComponent<AudioSource>();
+        if (audioSource == null)
+        {
+            audioSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        // Configure AudioSource
+        audioSource.loop = true;
+        audioSource.volume = musicVolume;
+        audioSource.spatialBlend = 0f; // 2D sound
+        audioSource.playOnAwake = true;
+
+        // Start with menu music if we're in a menu scene
+        string currentScene = SceneManager.GetActiveScene().name.ToLower();
+        if (currentScene == "intro" || currentScene == "createorlogin" || 
+            currentScene == "create" || currentScene == "login")
+        {
+            ChangeMusic(menuMusic);
         }
     }
 
@@ -43,28 +64,60 @@ public class AudioManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        Debug.Log($"Scene loaded: {scene.name}"); // Add this line for debugging
-        if (scene.name == "nene mainview")
+        string sceneName = scene.name.ToLower();
+        
+        // Menu music scenes
+        if (sceneName == "intro" || 
+            sceneName == "createorlogin" || 
+            sceneName == "create" || 
+            sceneName == "login")
         {
-            ChangeMusic(neneMainviewMusic);
+            ChangeMusic(menuMusic);
         }
-        else
+        // Play scene music
+        else if (sceneName == "play")
         {
-            ChangeMusic(defaultMusic);
+            ChangeMusic(playSceneMusic);
         }
+        // Gameplay music (nene mainview)
+        else if (sceneName == "nene mainview")
+        {
+            ChangeMusic(gameplayMusic);
+        }
+
+        Debug.Log($"Changed music for scene: {sceneName}");
     }
 
     private void ChangeMusic(AudioClip newMusic)
     {
-        if (newMusic == null)
+        if (audioSource == null || newMusic == null)
         {
-            Debug.LogError("Attempted to play null AudioClip");
+            Debug.LogError("AudioSource or AudioClip is missing!");
             return;
         }
 
-        audioSource.Stop();
-        audioSource.clip = newMusic;
-        audioSource.Play();
-        Debug.Log($"Changed music to: {newMusic.name}"); // Add this line for debugging
+        // Only change the music if it's different from the current one
+        if (audioSource.clip != newMusic)
+        {
+            audioSource.clip = newMusic;
+            audioSource.volume = musicVolume;
+            
+            if (!audioSource.isPlaying)
+            {
+                audioSource.Play();
+                Debug.Log($"Started playing: {newMusic.name}");
+            }
+        }
     }
+
+#if UNITY_EDITOR
+    // This helps with debugging
+    private void OnValidate()
+    {
+        if (audioSource != null)
+        {
+            audioSource.volume = musicVolume;
+        }
+    }
+#endif
 }

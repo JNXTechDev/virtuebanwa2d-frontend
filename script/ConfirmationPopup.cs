@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System;
 
 public class ConfirmationPopup : MonoBehaviour
 {
@@ -14,16 +13,9 @@ public class ConfirmationPopup : MonoBehaviour
 
     private void Start()
     {
-        try
-        {
-            yesButton.onClick.AddListener(OnYesButtonClicked);
-            noButton.onClick.AddListener(OnNoButtonClicked);
-            gameObject.SetActive(false);
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"ConfirmationPopup initialization warning: {ex.Message}");
-        }
+        yesButton.onClick.AddListener(OnYesButtonClicked);
+        noButton.onClick.AddListener(OnNoButtonClicked);
+        Hide(); // Ensure popup is hidden by default
     }
 
     public void Show(string message, System.Action onConfirm)

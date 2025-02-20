@@ -234,4 +234,9 @@ public class PlayManager : MonoBehaviour
             instance = null;
         }
     }
+
+    public string GetUsername()
+    {
+        return PlayerPrefs.GetString("Username", "");
+    }
 }

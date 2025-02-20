@@ -39,8 +39,8 @@ public class MainView : MonoBehaviour
     public Sprite boyHead;
     public Sprite girlHead;
 
-    // MongoDB API URL - render deployment cloud provider services
-    //   private const string baseUrl = "http://192.168.1.11:5000/api";
+    // MongoDB API URL
+  //  private const string baseUrl = "http://192.168.1.98:5000/api";
     private const string baseUrl = "https://vbdb.onrender.com/api";
 
 
@@ -111,7 +111,7 @@ public class MainView : MonoBehaviour
         // Initialize CameraFollow
         if (cameraFollow != null)
         {
-            cameraFollow.playerTransform = playerTransform;
+            cameraFollow.SetTarget(); // Ensure the target is set correctly
         }
         else
         {
@@ -120,7 +120,6 @@ public class MainView : MonoBehaviour
 
         DisplayClassroomInfo();
     }
-
 
     // Display classroom information using PlayerPrefs
     private void DisplayClassroomInfo()

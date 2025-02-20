@@ -23,11 +23,22 @@ public class LoadingManager : MonoBehaviour
 
         // Start loading the scene asynchronously
         AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(sceneName);
+        asyncLoad.allowSceneActivation = false; // Prevent immediate activation
 
-        // Wait until the asynchronous scene fully loads
+        // Wait until the scene is loaded
+        while (asyncLoad.progress < 0.9f)
+        {
+            yield return null;
+        }
+
+        // Ensure everything is ready before activating
+        yield return new WaitForSeconds(0.1f);
+        asyncLoad.allowSceneActivation = true;
+
+        // Wait for scene to fully load
         while (!asyncLoad.isDone)
         {
-            yield return null; // Wait for the next frame
+            yield return null;
         }
     }
 }

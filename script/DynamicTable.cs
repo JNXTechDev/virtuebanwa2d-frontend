@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -123,170 +123,63 @@ public class DynamicTable : MonoBehaviour
         }
     }
 
-    public async void SendRewards()
+    public void SendRewards()
     {
-        try
+        StartCoroutine(SendRewardCoroutine());
+    }
+
+    private IEnumerator SendRewardCoroutine()
+    {
+        if (string.IsNullOrEmpty(selectedStudentName))
         {
-            // Check if the database is initialized
-            if (!isDatabaseInitialized)
+            Debug.LogError("[DynamicTable] No student selected for reward!");
+            ShowFeedback("No student selected.");
+            yield break;
+        }
+
+        string fullName = selectedStudentName;
+        string reward = selectedReward.ToString();
+        string message = messageInputField.text;
+
+        // ✅ Correct JSON Serialization using Newtonsoft.Json
+        var rewardData = new RewardData
+        {
+            fullName = fullName,
+            reward = reward,
+            message = message
+        };
+
+        string jsonData = Newtonsoft.Json.JsonConvert.SerializeObject(rewardData);
+
+        Debug.Log($"[SendReward] JSON Payload: {jsonData}"); // ✅ Log the actual JSON
+
+        using (UnityWebRequest request = new UnityWebRequest("https://vbdb.onrender.com/api/users/rewards", "POST"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonData));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
             {
-                ShowFeedback("Database is not initialized. Please try again later.");
-                return; // Exit if the database is not initialized
+                Debug.Log("[DynamicTable] Reward sent successfully: " + request.downloadHandler.text);
+                ShowFeedback("Reward sent successfully!");
             }
-
-            var collection = database.GetCollection<BsonDocument>("users");
-
-            // Fetch the student's full details from the database using FullName
-            var filter = Builders<BsonDocument>.Filter.Eq("FullName", selectedStudentName);
-
-            Debug.Log($"Filter used: {filter}");
-
-            // Check if the student exists in the database
-            var student = await collection.Find(filter).FirstOrDefaultAsync();
-            if (student == null)
+            else
             {
-                Debug.LogError($"Student not found in database: {selectedStudentName}");
-                ShowFeedback("Student not found in the database.");
-                return;
+                Debug.LogError("[DynamicTable] Failed to send reward: " + request.error + " | Response: " + request.downloadHandler.text);
+                ShowFeedback("Failed to send reward. Please try again.");
             }
-
-            // Extract FirstName and LastName from the database document
-            string firstName = student.GetValue("FirstName").AsString;
-            string lastName = student.GetValue("LastName").AsString;
-
-            Debug.Log($"Found student - FirstName: {firstName}, LastName: {lastName}");
-
-            // Create a reward document to save in the database with Philippine time
-            DateTime utcNow = DateTime.UtcNow;
-            DateTime philippineTime = utcNow.AddHours(8);
-            string philippineTimeString = philippineTime.ToString("yyyy-MM-dd hh:mm:ss tt");
-
-            var rewardDocument = new BsonDocument
-            {
-                { "reward", selectedReward.ToString() },
-                { "message", messageInputField.text },
-                { "date", philippineTimeString } // Use human-readable Philippine Time
-            };
-
-            // Update the student's document in the database
-            var update = Builders<BsonDocument>.Update.Push("rewards_collected", rewardDocument);
-            await collection.UpdateOneAsync(filter, update);
-
-            Debug.Log($"Reward sent to {selectedStudentName}");
-
-            // Show feedback message
-            ShowFeedback("Reward sent successfully!");
-
-            // Close the SendRewardsPanel and other panels after 3 seconds
-            StartCoroutine(ClosePanelsAfterDelay(3f));
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"Error sending rewards: {ex.Message}");
-            ShowFeedback("Error sending reward. Please try again.");
         }
     }
 
-    private void ShowFeedback(string message)
-    {
-        if (FeedbackPanel != null && FeedbackText != null)
-        {
-            FeedbackText.text = message; // Set the feedback message
-            FeedbackPanel.SetActive(true); // Activate the FeedbackPanel
-        }
-        else
-        {
-            Debug.LogError("FeedbackPanel or FeedbackText reference is missing!");
-        }
-    }
-
-    private IEnumerator ClosePanelsAfterDelay(float delay)
-    {
-        // Wait for the specified delay
-        yield return new WaitForSeconds(delay);
-
-        // Close the SendRewardsPanel and other panels
-        CloseSendRewardsPanel();
-        CloseViewRewardsPanel(); // Close the rewards panel if needed
-
-        // Hide the FeedbackPanel after closing panels
-        if (FeedbackPanel != null)
-        {
-            FeedbackPanel.SetActive(false);
-        }
-    }
-
-    private List<GameObject> rows = new List<GameObject>(); // Store all rows for searching
-    private IMongoDatabase database; // MongoDB database instance
-
-    private void Start()
-    {
-        try
-        {
-            Application.logMessageReceived += HandleLog;
-            
-            // Initialize MongoDB
-            InitializeMongoDB();
-
-            // Assign button listeners
-            AssignButtonListeners();
-
-            // Ensure proper initialization order
-            StartCoroutine(InitializeUIComponents());
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"Critical error in Start: {ex.Message}\n{ex.StackTrace}");
-        }
-    }
-
-    private bool isDatabaseInitialized = false;
-
-    private void InitializeMongoDB()
-    {
-        try
-        {
-            // Get connection string from PlayerPrefs instead of environment variable
-            var connectionString = PlayerPrefs.GetString("MONGO_URI", "");
-            
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                Debug.LogError("MongoDB initialization failed: MONGO_URI is not set in PlayerPrefs");
-                ShowFeedback("Database configuration missing. Please check settings.");
-                return;
-            }
-
-            var settings = MongoClientSettings.FromConnectionString(connectionString);
-            
-            // Ensure the server list is not empty
-            if (settings.Servers.Count() == 0)
-            {
-                Debug.LogError("MongoDB initialization failed: List of configured name servers must not be empty.");
-                ShowFeedback("Invalid database configuration.");
-                return;
-            }
-
-            var client = new MongoClient(settings);
-            database = client.GetDatabase("Users");
-
-            // Verify connection asynchronously
-            StartCoroutine(VerifyDatabaseConnection());
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"MongoDB initialization failed: {ex.Message}");
-            database = null;
-            isDatabaseInitialized = false;
-            ShowFeedback("Database connection failed. Please check your internet connection.");
-        }
-    }
 
     private IEnumerator VerifyDatabaseConnection()
     {
         if (database == null)
         {
-            Debug.LogError("Database is null during verification");
-            isDatabaseInitialized = false;
+            Debug.LogError("[DynamicTable] Database is null during verification");
             ShowFeedback("Database connection failed.");
             yield break;
         }
@@ -305,17 +198,61 @@ public class DynamicTable : MonoBehaviour
             if (pingTask.Exception != null)
                 throw pingTask.Exception;
 
-            Debug.Log("MongoDB connection verified successfully");
-            isDatabaseInitialized = true;
+            Debug.Log("[DynamicTable] MongoDB connection verified successfully");
             ShowFeedback("Database connected successfully.");
         }
         catch (Exception ex)
         {
-            Debug.LogError($"MongoDB verification failed: {ex.Message}");
+            Debug.LogError($"[DynamicTable] MongoDB verification failed: {ex.Message}");
             database = null;
-            isDatabaseInitialized = false;
             ShowFeedback("Database connection failed. Please check your connection.");
         }
+    }
+
+    private List<GameObject> rows = new List<GameObject>(); // Store all rows for searching
+    private IMongoDatabase database; // MongoDB database instance
+
+    private void Start()
+    {
+        try
+        {
+            Debug.Log("[DynamicTable] Starting initialization...");
+            Application.logMessageReceived += HandleLog;
+
+            // ❌ REMOVE this since we don't need MongoDB inside Unity
+            // Debug.Log("[DynamicTable] Calling InitializeMongoDB...");
+            // await InitializeMongoDB();  
+
+            // ✅ Just proceed with the game logic
+            Debug.Log("[DynamicTable] Assigning button listeners...");
+            AssignButtonListeners();
+            Debug.Log("[DynamicTable] Starting UI component initialization...");
+            StartCoroutine(InitializeUIComponents());
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[DynamicTable] Critical error in Start: {ex.Message}\nStack trace: {ex.StackTrace}");
+        }
+    }
+
+
+
+    private IEnumerator InitializeUIComponents()
+    {
+        yield return null; // Wait one frame for all components to be properly initialized
+
+        // Setup UI components with proper layout
+        SetupUIComponents();
+
+        // Force layout rebuild
+        if (scrollRect != null && scrollRect.content != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+            Canvas.ForceUpdateCanvases();
+        }
+
+        // Continue with other initializations
+        yield return StartCoroutine(SafeInitialization());
     }
 
     private bool SetupUIComponentsSafely()
@@ -333,7 +270,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"UI Setup error: {ex.Message}");
+            Debug.LogError($"[DynamicTable] UI Setup error: {ex.Message}");
             return false;
         }
     }
@@ -356,7 +293,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Initialization error: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Initialization error: {ex.Message}");
         }
     }
 
@@ -418,24 +355,6 @@ public class DynamicTable : MonoBehaviour
         }
     }
 
-    private IEnumerator InitializeUIComponents()
-    {
-        yield return null; // Wait one frame for all components to be properly initialized
-
-        // Setup UI components with proper layout
-        SetupUIComponents();
-
-        // Force layout rebuild
-        if (scrollRect != null && scrollRect.content != null)
-        {
-            LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
-            Canvas.ForceUpdateCanvases();
-        }
-
-        // Continue with other initializations
-        yield return StartCoroutine(SafeInitialization());
-    }
-
     private IEnumerator InitializeDataAndListeners()
     {
         yield return new WaitForSeconds(1);
@@ -449,7 +368,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error in InitializeDataAndListeners: {ex.Message}\nStackTrace: {ex.StackTrace}");
+            Debug.LogError($"[DynamicTable] Error in InitializeDataAndListeners: {ex.Message}\nStackTrace: {ex.StackTrace}");
             ShowFeedback("Error loading data. Please check connection.");
         }
     }
@@ -475,7 +394,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error clearing rows: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error clearing rows: {ex.Message}");
         }
     }
 
@@ -537,18 +456,18 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error reading file: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error reading file: {ex.Message}");
             return new FileResult { Success = false, Error = ex.Message };
         }
     }
 
     public void OnUploadButtonClick()
     {
-        Debug.Log("Upload button clicked");
+        Debug.Log("[DynamicTable] Upload button clicked");
 
         if (isUploadInProgress || isProcessing)
         {
-            Debug.LogWarning("Process already in progress. Please wait...");
+            Debug.LogWarning("[DynamicTable] Process already in progress. Please wait...");
             ShowFeedback("Please wait for current process to complete");
             return;
         }
@@ -573,7 +492,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (System.Exception ex)
         {
-            Debug.LogError($"Error starting upload: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error starting upload: {ex.Message}");
             ShowFeedback("Upload failed to start. Please try again.");
             ResetUploadState();
         }
@@ -601,7 +520,7 @@ public class DynamicTable : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("Storage permission not granted");
+            Debug.LogWarning("[DynamicTable] Storage permission not granted");
             ShowFeedback("Storage permission required to select files");
             ResetUploadState();
         }
@@ -622,7 +541,7 @@ public class DynamicTable : MonoBehaviour
                     return;
                 }
 
-                Debug.Log($"Selected file path: {path}");
+                Debug.Log($"[DynamicTable] Selected file path: {path}");
                 if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
                 {
                     await UploadFileToServer(path);
@@ -642,7 +561,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error in file picker: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error in file picker: {ex.Message}");
             ShowFeedback("Error selecting file. Please try again.");
             ResetUploadState();
         }
@@ -668,7 +587,7 @@ public class DynamicTable : MonoBehaviour
                 request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
                 request.timeout = 30; // Increase timeout to 30 seconds
                 
-                Debug.Log($"Sending file: {Path.GetFileName(filePath)}");
+                Debug.Log($"[DynamicTable] Sending file: {Path.GetFileName(filePath)}");
                 var operation = request.SendWebRequest();
                 
                 while (!operation.isDone) 
@@ -680,7 +599,7 @@ public class DynamicTable : MonoBehaviour
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     string responseText = request.downloadHandler.text;
-                    Debug.Log($"Server response: {responseText}");
+                    Debug.Log($"[DynamicTable] Server response: {responseText}");
                     
                     var response = JsonUtility.FromJson<UploadResponse>(responseText);
                     ShowFeedback($"Successfully uploaded {response.count} students!");
@@ -689,14 +608,14 @@ public class DynamicTable : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogError($"Upload failed: {request.error}\nResponse: {request.downloadHandler.text}");
+                    Debug.LogError($"[DynamicTable] Upload failed: {request.error}\nResponse: {request.downloadHandler.text}");
                     ShowFeedback("Failed to upload file. Please try again.");
                 }
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error uploading file: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error uploading file: {ex.Message}");
             ShowFeedback("Error uploading file. Please try again.");
         }
         finally
@@ -719,19 +638,14 @@ public class DynamicTable : MonoBehaviour
             // Ensure we're not already processing
             if (!isProcessing)
             {
-                Debug.LogError("Process state invalid");
+                Debug.LogError("[DynamicTable] Process state invalid");
                 return;
             }
 
             ShowFeedback("Initializing database connection...");
             await EnsureDatabaseInitialized();
             
-            if (!isDatabaseInitialized)
-            {
-                ShowFeedback("Failed to connect to database. Please check your connection.");
-                ResetUploadState();
-                return;
-            }
+        
 
             ShowFeedback("Reading CSV file...");
             
@@ -742,7 +656,7 @@ public class DynamicTable : MonoBehaviour
             }
             
             string[] lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            Debug.Log($"Read {lines.Length} lines from CSV");
+            Debug.Log($"[DynamicTable] Read {lines.Length} lines from CSV");
 
             if (lines.Length <= 1)
             {
@@ -784,13 +698,13 @@ public class DynamicTable : MonoBehaviour
 
                             await collection.InsertOneAsync(studentData);
                             successCount++;
-                            Debug.Log($"Added student: {firstName} {lastName}");
+                            Debug.Log($"[DynamicTable] Added student: {firstName} {lastName}");
                             
                             ShowFeedback($"Processing... ({successCount} added)");
                         }
                         catch (Exception ex)
                         {
-                            Debug.LogError($"Error adding student {firstName} {lastName}: {ex.Message}");
+                            Debug.LogError($"[DynamicTable] Error adding student {firstName} {lastName}: {ex.Message}");
                         }
                     }
                 }
@@ -802,7 +716,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error processing CSV: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error processing CSV: {ex.Message}");
             ShowFeedback($"Error processing CSV: {ex.Message}");
         }
         finally
@@ -813,12 +727,11 @@ public class DynamicTable : MonoBehaviour
 
     private async Task EnsureDatabaseInitialized()
     {
-        if (isDatabaseInitialized) return;
 
         string connectionString = PlayerPrefs.GetString("MONGO_URI", "");
         if (string.IsNullOrEmpty(connectionString))
         {
-            Debug.LogError("MongoDB URI not found in PlayerPrefs!");
+            Debug.LogError("[DynamicTable] MongoDB URI not found in PlayerPrefs!");
             ShowFeedback("Database configuration missing. Please restart the application.");
             throw new System.Exception("MongoDB URI not configured");
         }
@@ -826,18 +739,19 @@ public class DynamicTable : MonoBehaviour
         int maxRetries = 3;
         int currentTry = 0;
 
-        while (!isDatabaseInitialized && currentTry < maxRetries)
         {
             try
             {
-                Debug.Log($"Attempting database connection (attempt {currentTry + 1}/{maxRetries})");
-                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                Debug.Log($"[DynamicTable] Attempting database connection (attempt {currentTry + 1}/{maxRetries})");
                 
-                if (settings.Servers == null || !settings.Servers.Any())
-                {
-                    throw new System.Exception("Invalid MongoDB connection string format");
-                }
+                var settings = MongoClientSettings.FromUrl(new MongoUrl(connectionString));
+                settings.ServerApi = new ServerApi(ServerApiVersion.V1);
+                settings.ConnectTimeout = TimeSpan.FromSeconds(30);
+                settings.ServerSelectionTimeout = TimeSpan.FromSeconds(30);
+                settings.DirectConnection = true;  // Force direct connection
 
+                Debug.Log($"[DynamicTable] Server settings - Host: {settings.Server?.Host}, Port: {settings.Server?.Port}");
+                
                 var client = new MongoClient(settings);
                 database = client.GetDatabase("Users");
 
@@ -845,14 +759,17 @@ public class DynamicTable : MonoBehaviour
                 var pingCommand = new BsonDocument("ping", 1);
                 await database.RunCommandAsync<BsonDocument>(pingCommand);
 
-                isDatabaseInitialized = true;
-                Debug.Log("✅ Database initialized successfully");
+                Debug.Log("[DynamicTable] Database initialized successfully");
                 ShowFeedback("Connected to database");
                 return;
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"❌ Database initialization attempt {currentTry + 1} failed: {ex.Message}");
+                Debug.LogError($"[DynamicTable] Database initialization attempt {currentTry + 1} failed: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Debug.LogError($"[DynamicTable] Inner exception: {ex.InnerException.Message}");
+                }
                 currentTry++;
                 if (currentTry < maxRetries)
                 {
@@ -874,7 +791,7 @@ public class DynamicTable : MonoBehaviour
 
     private IEnumerator FetchStudentsCoroutine()
     {
-        Debug.Log("Starting to fetch students...");
+        Debug.Log("[DynamicTable] Starting to fetch students...");
 
         if (Application.internetReachability == NetworkReachability.NotReachable)
         {
@@ -951,7 +868,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error processing response: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error processing response: {ex.Message}");
             return new FetchResult 
             { 
                 Success = false, 
@@ -975,12 +892,12 @@ public class DynamicTable : MonoBehaviour
             var request = UnityWebRequest.Get(url);
             request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
             request.timeout = 10;
-            Debug.Log($"Sending request to: {url}");
+            Debug.Log($"[DynamicTable] Sending request to: {url}");
             return new RequestResult { Success = true, Request = request };
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error creating request: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error creating request: {ex.Message}");
             return new RequestResult { Success = false, ErrorMessage = "Error creating request" };
         }
     }
@@ -998,7 +915,7 @@ public class DynamicTable : MonoBehaviour
                 };
             }
             
-            Debug.LogError($"Request failed: {request.error}");
+            Debug.LogError($"[DynamicTable] Request failed: {request.error}");
             return new RequestResult 
             { 
                 Success = false, 
@@ -1007,7 +924,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error processing response: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error processing response: {ex.Message}");
             return new RequestResult 
             { 
                 Success = false, 
@@ -1082,7 +999,7 @@ public class DynamicTable : MonoBehaviour
             yield break;
 
         ClearExistingRows();
-        Debug.Log($"Raw response: {responseContent}");
+        Debug.Log($"[DynamicTable] Raw response: {responseContent}");
 
         var deserializeTask = DeserializeUsersAsync(responseContent);
         while (!deserializeTask.IsCompleted)
@@ -1116,12 +1033,12 @@ public class DynamicTable : MonoBehaviour
     {
         try
         {
-            Debug.Log($"Attempting to read file from: {filePath}");
+            Debug.Log($"[DynamicTable] Attempting to read file from: {filePath}");
 
             // Check if the file exists
             if (!File.Exists(filePath))
             {
-                Debug.LogError($"File does not exist at path: {filePath}");
+                Debug.LogError($"[DynamicTable] File does not exist at path: {filePath}");
                 return;
             }
 
@@ -1129,47 +1046,45 @@ public class DynamicTable : MonoBehaviour
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             using (var stream = File.Open(filePath, FileMode.Open, FileAccess.Read))
+            using (var reader = ExcelReaderFactory.CreateReader(stream))
             {
-                using (var reader = ExcelReaderFactory.CreateReader(stream))
+                // Skip the header row
+                reader.Read();
+
+                while (reader.Read())
                 {
-                    // Skip the header row
-                    reader.Read();
-
-                    while (reader.Read())
+                    try
                     {
-                        try
-                        {
-                            // Read values from the Excel file
-                            string firstName = reader.GetString(0) ?? "";
-                            string lastName = reader.GetString(1) ?? "";
-                            string role = reader.GetString(2) ?? "Student"; // Default to "Student" if not provided
-                            string section = reader.GetString(3) ?? "";
-                            string username = reader.GetString(4) ?? "";
-                            string character = reader.GetString(5) ?? "";
+                        // Read values from the Excel file
+                        string firstName = reader.GetString(0) ?? "";
+                        string lastName = reader.GetString(1) ?? "";
+                        string role = reader.GetString(2) ?? "Student"; // Default to "Student" if not provided
+                        string section = reader.GetString(3) ?? "";
+                        string username = reader.GetString(4) ?? "";
+                        string character = reader.GetString(5) ?? "";
 
-                            // Check for valid names before uploading
-                            if (!string.IsNullOrEmpty(firstName) && !string.IsNullOrEmpty(lastName))
-                            {
-                                await UploadStudentToMongoDB(firstName, lastName, section, username, role, character);
-                                Debug.Log($"Uploaded student: {firstName} {lastName} in section {section}");
-                            }
-                            else
-                            {
-                                Debug.LogWarning("Skipping row due to missing FirstName or LastName.");
-                            }
-                        }
-                        catch (Exception ex)
+                        // Check for valid names before uploading
+                        if (!string.IsNullOrEmpty(firstName) && !string.IsNullOrEmpty(lastName))
                         {
-                            Debug.LogError($"Error processing row: {ex.Message}");
+                            await UploadStudentToMongoDB(firstName, lastName, section, username, role, character);
+                            Debug.Log($"[DynamicTable] Uploaded student: {firstName} {lastName} in section {section}");
                         }
+                        else
+                        {
+                            Debug.LogWarning("[DynamicTable] Skipping row due to missing FirstName or LastName.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"[DynamicTable] Error processing row: {ex.Message}");
                     }
                 }
             }
-            Debug.Log("Excel file processed successfully");
+            Debug.Log("[DynamicTable] Excel file processed successfully");
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error reading Excel file: {ex.Message}\nStackTrace: {ex.StackTrace}");
+            Debug.LogError($"[DynamicTable] Error reading Excel file: {ex.Message}\nStackTrace: {ex.StackTrace}");
             throw; // Rethrow the exception to be caught by the caller
         }
     }
@@ -1181,13 +1096,13 @@ public class DynamicTable : MonoBehaviour
             // Check if the database is initialized
             if (database == null)
             {
-                Debug.LogError("Database is not initialized. Cannot upload student data.");
+                Debug.LogError("[DynamicTable] Database is not initialized. Cannot upload student data.");
                 ShowFeedback("Database connection failed. Please check your internet connection.");
                 return; // Exit if the database is not initialized
             }
 
             // Log the values being uploaded
-            Debug.Log($"Uploading student data: FirstName: {firstName}, LastName: {lastName}, Section: {section}, Username: {username}, Role: {role}, Character: {character}");
+            Debug.Log($"[DynamicTable] Uploading student data: FirstName: {firstName}, LastName: {lastName}, Section: {section}, Username: {username}, Role: {role}, Character: {character}");
 
             var collection = database.GetCollection<BsonDocument>("users");
 
@@ -1204,11 +1119,11 @@ public class DynamicTable : MonoBehaviour
         };
 
             await collection.InsertOneAsync(studentData);
-            Debug.Log($"Student data uploaded: {username} ({firstName} {lastName})");
+            Debug.Log($"[DynamicTable] Student data uploaded: {username} ({firstName} {lastName})");
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error uploading student data: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error uploading student data: {ex.Message}");
             ShowFeedback("Error uploading student data. Please try again.");
         }
     }
@@ -1217,7 +1132,7 @@ public class DynamicTable : MonoBehaviour
     {
         if (string.IsNullOrEmpty(studentName) || string.IsNullOrEmpty(sectionName))
         {
-            Debug.LogError("Invalid student or section name");
+            Debug.LogError("[DynamicTable] Invalid student or section name");
             return;
         }
 
@@ -1225,21 +1140,21 @@ public class DynamicTable : MonoBehaviour
         {
             if (rowPrefab == null || tableParent == null)
             {
-                Debug.LogError("Required components missing for AddRow");
+                Debug.LogError("[DynamicTable] Required components missing for AddRow");
                 return;
             }
 
             GameObject newRow = Instantiate(rowPrefab, tableParent);
             if (newRow == null)
             {
-                Debug.LogError("Failed to instantiate row");
+                Debug.LogError("[DynamicTable] Failed to instantiate row");
                 return;
             }
 
             var rowRect = newRow.GetComponent<RectTransform>();
             if (rowRect == null)
             {
-                Debug.LogError("Row prefab missing RectTransform");
+                Debug.LogError("[DynamicTable] Row prefab missing RectTransform");
                 Destroy(newRow);
                 return;
             }
@@ -1253,7 +1168,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error in AddRow: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error in AddRow: {ex.Message}");
         }
     }
 
@@ -1318,7 +1233,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error in UpdateLayoutAndScroll: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error in UpdateLayoutAndScroll: {ex.Message}");
         }
     }
 
@@ -1337,7 +1252,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error getting student character: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error getting student character: {ex.Message}");
         }
         return "";
     }
@@ -1348,14 +1263,14 @@ public class DynamicTable : MonoBehaviour
         string[] nameParts = studentName.Split(' ');
         if (nameParts.Length < 2)
         {
-            Debug.LogError("Invalid student name format");
+            Debug.LogError("[DynamicTable] Invalid student name format");
             return null;
         }
 
         string firstName = nameParts[0].Trim();
         string lastName = string.Join(" ", nameParts.Skip(1)).Trim();
 
-        Debug.Log($"Searching for - FirstName: {firstName}, LastName: {lastName}");
+        Debug.Log($"[DynamicTable] Searching for - FirstName: {firstName}, LastName: {lastName}");
 
         var filter = Builders<BsonDocument>.Filter.And(
             Builders<BsonDocument>.Filter.Eq("FirstName", firstName),
@@ -1366,17 +1281,17 @@ public class DynamicTable : MonoBehaviour
 
         if (result != null)
         {
-            Debug.Log($"Found document with ID: {result["_id"]}");
+            Debug.Log($"[DynamicTable] Found document with ID: {result["_id"]}");
             return result["Username"].AsString;
         }
 
-        Debug.LogWarning($"No document found for student: {studentName}");
+        Debug.LogWarning($"[DynamicTable] No document found for student: {studentName}");
         return null;
     }
 
     public void OnStudentClick(string studentName, string sectionName)
     {
-        Debug.Log($"Clicked on student: {studentName} with section: {sectionName}");
+        Debug.Log($"[DynamicTable] Clicked on student: {studentName} with section: {sectionName}");
 
         try
         {
@@ -1389,7 +1304,7 @@ public class DynamicTable : MonoBehaviour
             if (studentNameText != null)
             {
                 studentNameText.text = studentName;
-                Debug.Log($"Set student name: {studentName}");
+                Debug.Log($"[DynamicTable] Set student name: {studentName}");
 
                 // Set the selectedStudentFullName variable
                 selectedStudentFullName = studentName; // Assuming studentName is the full name
@@ -1398,7 +1313,7 @@ public class DynamicTable : MonoBehaviour
             if (sectionText != null)
             {
                 sectionText.text = sectionName;
-                Debug.Log($"Set section text to: {sectionName}");
+                Debug.Log($"[DynamicTable] Set section text to: {sectionName}");
             }
 
             // Get and set character
@@ -1409,7 +1324,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error in OnStudentClick: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error in OnStudentClick: {ex.Message}");
         }
     }
 
@@ -1500,7 +1415,7 @@ public class DynamicTable : MonoBehaviour
         }
         else
         {
-            Debug.LogError("No student selected!");
+            Debug.LogError("[DynamicTable] No student selected!");
         }
     }
 
@@ -1518,7 +1433,6 @@ public class DynamicTable : MonoBehaviour
 
             string firstName = firstNameInputField.text.Trim();
             string lastName = lastNameInputField.text.Trim();
-        //    string fullName = $"{firstName} {lastName}";
             string username = usernameInputField.text.Trim(); // Use the actual username input
             string section = sectionDropdown.options[sectionDropdown.value].text;
             string character = characterDropdown.options[characterDropdown.value].text;
@@ -1530,7 +1444,6 @@ public class DynamicTable : MonoBehaviour
             {
                 { "FirstName", firstName },
                 { "LastName", lastName },
-              //  { "FullName", fullName },
                 { "Username", username },
                 { "Section", section },
                 { "Character", character },
@@ -1539,7 +1452,7 @@ public class DynamicTable : MonoBehaviour
                 { "Password", "defaultPassword" }
             };
 
-            Debug.Log($"Sending user data: {JsonConvert.SerializeObject(userData)}");
+            Debug.Log($"[DynamicTable] Sending user data: {JsonConvert.SerializeObject(userData)}");
 
             string jsonData = JsonConvert.SerializeObject(userData);
             byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
@@ -1565,14 +1478,14 @@ public class DynamicTable : MonoBehaviour
                 }
                 else
                 {
-                    Debug.LogError($"Failed to create student: {request.downloadHandler.text}");
+                    Debug.LogError($"[DynamicTable] Failed to create student: {request.downloadHandler.text}");
                     ShowFeedback("Failed to create student. Please try again.");
                 }
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error creating student: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error creating student: {ex.Message}");
             ShowFeedback("Error creating student. Please try again.");
         }
     }
@@ -1621,7 +1534,7 @@ public class DynamicTable : MonoBehaviour
         catch (Exception ex)
 
         {
-            Debug.LogError($"Error in FetchStudents: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error in FetchStudents: {ex.Message}");
 
 
         }
@@ -1659,7 +1572,7 @@ public class DynamicTable : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error processing student: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error processing student: {ex.Message}");
 
         }
 
@@ -1710,7 +1623,7 @@ private async Task<(string firstName, string lastName)> GetStudentNameFromDataba
     {
         if (database == null)
         {
-            Debug.LogError("Database is not initialized.");
+            Debug.LogError("[DynamicTable] Database is not initialized.");
             return (null, null);
         }
 
@@ -1732,13 +1645,13 @@ private async Task<(string firstName, string lastName)> GetStudentNameFromDataba
         }
         else
         {
-            Debug.LogError($"Student not found in database: {fullName}");
+            Debug.LogError($"[DynamicTable] Student not found in database: {fullName}");
             return (null, null); // Return null if the student is not found
         }
     }
     catch (Exception ex)
     {
-        Debug.LogError($"Error fetching student name from database: {ex.Message}");
+        Debug.LogError($"[DynamicTable] Error fetching student name from database: {ex.Message}");
         return (null, null); // Return null in case of an error
     }
 }
@@ -1751,7 +1664,7 @@ public async void OnRemoveStudentButtonClick()
 
     string fullName = selectedStudentFullName;
     
-    Debug.Log($"Attempting to remove student: '{fullName}'");
+    Debug.Log($"[DynamicTable] Attempting to remove student: '{fullName}'");
     
     if (string.IsNullOrWhiteSpace(fullName))
     {
@@ -1790,14 +1703,14 @@ public async void OnRemoveStudentButtonClick()
             }
             else
             {
-                Debug.LogError($"Remove request failed: {request.error}");
+                Debug.LogError($"[DynamicTable] Remove request failed: {request.error}");
                 ShowFeedback("Failed to remove student. Please try again.");
             }
         }
     }
     catch (Exception ex)
     {
-        Debug.LogError($"Error removing student: {ex.Message}");
+        Debug.LogError($"[DynamicTable] Error removing student: {ex.Message}");
         ShowFeedback("Error removing student.");
     }
     finally
@@ -1850,7 +1763,7 @@ public async void OnRemoveStudentButtonClick()
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     string responseText = request.downloadHandler.text;
-                    Debug.Log($"Raw sections response: {responseText}"); // Debug log
+                    Debug.Log($"[DynamicTable] Raw sections response: {responseText}"); // Debug log
 
                     // Parse sections directly from JSON array
                     var sections = JsonConvert.DeserializeObject<List<string>>(responseText);
@@ -1867,7 +1780,7 @@ public async void OnRemoveStudentButtonClick()
                         options.AddRange(sections);
                         
                         sectionDropdown.AddOptions(options);
-                        Debug.Log($"Loaded {sections.Count} sections");
+                        Debug.Log($"[DynamicTable] Loaded {sections.Count} sections");
                         
                         // Select "Select Section" by default
                         sectionDropdown.value = 0;
@@ -1881,14 +1794,14 @@ public async void OnRemoveStudentButtonClick()
                 }
                 else
                 {
-                    Debug.LogError($"Failed to fetch sections: {request.error}");
+                    Debug.LogError($"[DynamicTable] Failed to fetch sections: {request.error}");
                     ShowFeedback("Failed to load sections");
                 }
             }
         }
         catch (Exception ex)
         {
-            Debug.LogError($"Error fetching sections: {ex.Message}");
+            Debug.LogError($"[DynamicTable] Error fetching sections: {ex.Message}");
             ShowFeedback("Error loading sections");
         }
     }
@@ -2018,7 +1931,7 @@ public async void OnRemoveStudentButtonClick()
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             encodingRegistered = true;
-            Debug.Log("Encoding provider registered successfully");
+            Debug.Log("[DynamicTable] Encoding provider registered successfully");
         }
     }
 
@@ -2035,6 +1948,52 @@ public async void OnRemoveStudentButtonClick()
     {
         Canvas.ForceUpdateCanvases();
         yield return new WaitForEndOfFrame();
+    }
+
+    private void ShowFeedback(string message)
+    {
+        Debug.Log($"[DynamicTable] Showing feedback: {message}");
+        
+        // First ensure the FeedbackPanel exists and is referenced
+        if (FeedbackPanel == null)
+        {
+            Debug.LogError("[DynamicTable] FeedbackPanel reference is missing!");
+            return;
+        }
+
+        if (FeedbackText == null)
+        {
+            Debug.LogError("[DynamicTable] FeedbackText reference is missing!");
+            return;
+        }
+
+        try
+        {
+            // Make sure the panel is active before setting text
+            if (!FeedbackPanel.activeInHierarchy)
+            {
+                FeedbackPanel.SetActive(true);
+            }
+
+            FeedbackText.text = message;
+
+            // Schedule panel to close after 3 seconds
+            StartCoroutine(AutoCloseFeedback(3f));
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[DynamicTable] Error showing feedback: {ex.Message}");
+        }
+    }
+
+    private IEnumerator AutoCloseFeedback(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (FeedbackPanel != null && FeedbackPanel.activeInHierarchy)
+        {
+            FeedbackPanel.SetActive(false);
+        }
     }
 }
 
