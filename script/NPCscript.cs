@@ -404,40 +404,74 @@ public class NPCscript : MonoBehaviour
 
     private async Task SaveRewardToAPI(int choiceIndex, string rewardName, string congratsMessage)
     {
-        string currentSceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
-
-        using (HttpClient client = new HttpClient())
+        try
         {
-            try
+            string username = GetCurrentUsername();
+            Debug.Log($"Saving reward for username: {username}");
+
+            // Create a fully populated tutorial progress instance
+            var tutorialProgress = new TutorialProgress
             {
-                var rewardData = new
+                status = "Completed", // Explicitly set status
+                reward = rewardName,
+                date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+            };
+
+            // Create the game progress data with all required fields
+            var progressData = new GameProgressData
+            {
+                Username = username,
+                tutorial = tutorialProgress,
+                units = new Dictionary<string, UnitProgress>
                 {
-                    username = playerUsername, //change to Username? 
-                    unit = currentUnit,
-                    lesson = currentLesson,
-                    reward = rewardName,
-                    message = congratsMessage
-                };
+                    ["Unit1"] = new UnitProgress
+                    {
+                        status = "Not Started",
+                        completedLessons = 0,
+                        unitScore = 0,
+                        lessons = new Dictionary<string, LessonProgress>
+                        {
+                            ["Lesson1"] = new LessonProgress
+                            {
+                                status = "Available",
+                                reward = "",
+                                score = 0,
+                                lastAttempt = DateTime.Now
+                            }
+                        }
+                    }
+                },
+                currentUnit = "Unit1",
+                currentLesson = "Lesson1",
+                // These fields are for backward compatibility
+                unit = currentUnit,
+                lesson = currentLesson,
+                reward = rewardName,
+                message = congratsMessage
+            };
 
-                string json = JsonUtility.ToJson(rewardData);
+            string json = JsonUtility.ToJson(progressData);
+            Debug.Log($"Sending reward data: {json}");
+
+            using (var client = new HttpClient())
+            {
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
-
+                var response = await client.PostAsync($"{baseUrl}/game_progress", content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+                
                 if (response.IsSuccessStatusCode)
                 {
-                    Debug.Log("Reward saved successfully via API.");
+                    Debug.Log($"Reward saved successfully. Response: {responseContent}");
                 }
                 else
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    Debug.LogError($"Failed to save reward via API: {responseContent}");
+                    Debug.LogError($"Failed to save reward. Response: {responseContent}");
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error saving reward via API: {ex.Message}");
-            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error saving reward: {ex.Message}");
         }
     }
 
