@@ -76,7 +76,21 @@ public class NPCscript : MonoBehaviour
         public string rewardText; // New field for reward text
     }
 
+    // In the Unity Inspector, set up reward choices:
     public List<RewardChoice> rewardChoices = new List<RewardChoice>();
+
+    // Example setup in Unity Inspector:
+    // Choice 1:
+    //   - choiceName: "Gold Star"
+    //   - congratsMessage: "Excellent work!"
+    //   - rewardSprite: [Assign star sprite]
+    //   - rewardText: "You earned a Gold Star!"
+
+    // Choice 2:
+    //   - choiceName: "Silver Badge"
+    //   - congratsMessage: "Great job!"
+    //   - rewardSprite: [Assign badge sprite]
+    //   - rewardText: "You earned a Silver Badge!"
 
     public float rewardDisplayDuration = 2f; // New variable to set the duration in the Inspector
 
@@ -91,7 +105,9 @@ public class NPCscript : MonoBehaviour
     private DialogueType currentDialogueType;
 
     // Base URL for your API
-    private const string baseUrl = "http://192.168.1.98:5000/api";
+ private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
+      //  private const string baseUrl = "https://vbdb.onrender.com/api";
+
 
     void Start()
     {
@@ -117,10 +133,14 @@ public class NPCscript : MonoBehaviour
             TMP_Text usernameText = playerUsernameObject.GetComponent<TMP_Text>();
             if (usernameText != null)
             {
-                return usernameText.text;
+                string username = usernameText.text.Replace("#", ""); // Remove the "#" character
+                Debug.Log($"Current Username from Text: {username}"); //change to Username? 
+                return username;
             }
         }
-        return PlayerPrefs.GetString("PlayerUsername", "Player");
+        string usernameFromPrefs = PlayerPrefs.GetString("Username", "Player");
+        Debug.Log($"Current Username from PlayerPrefs: {usernameFromPrefs}");
+        return usernameFromPrefs;
     }
 
     private void InitializeChoiceButtons()
@@ -392,23 +412,17 @@ public class NPCscript : MonoBehaviour
             {
                 var rewardData = new
                 {
-                    username = playerUsername,
+                    username = playerUsername, //change to Username? 
                     unit = currentUnit,
                     lesson = currentLesson,
-                    sceneName = currentSceneName,
-                    selectedChoice = choiceIndex,
-                    reward = new
-                    {
-                        rewardName = rewardName,
-                        congratsMessage = congratsMessage,
-                        timestamp = System.DateTime.UtcNow
-                    }
+                    reward = rewardName,
+                    message = congratsMessage
                 };
 
                 string json = JsonUtility.ToJson(rewardData);
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/saveReward", content);
+                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
 
                 if (response.IsSuccessStatusCode)
                 {

@@ -14,8 +14,10 @@ public class SceneTransition : MonoBehaviour
     [System.Serializable]
     public class LessonInfo
     {
-        public string unit = "UNIT 1";
-        public string lesson = "Lesson 1";
+        public string unit = "Tutorial"; // Change default unit name
+        public string lesson = "Introduction"; // Change default lesson name
+        public string rewardName = "Star Badge"; // Add this line
+        public string rewardMessage = "You've mastered the basics!"; // Add this line
     }
 
     public GameObject usernameObject;      // GameObject containing the dynamic username
@@ -35,7 +37,10 @@ public class SceneTransition : MonoBehaviour
     [Range(0f, 1f)]
     public float initialBlackScreenAlpha = 0f; // Add this line
 
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+   // private const string baseUrl = "https://vbdb.onrender.com/api";
+
+
+ private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
 
     // Constants for UI messages
     private const string SavingProgressMessage = "Saving progress...";
@@ -158,43 +163,40 @@ public class SceneTransition : MonoBehaviour
     {
         Debug.Log($"Saving progress for username: {username}, unit: {unit}, lesson: {lesson}");
 
-        if (string.IsNullOrEmpty(username) || username == UnknownUsername)
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(unit) || string.IsNullOrEmpty(lesson))
         {
-            Debug.LogError("Invalid username.");
+            Debug.LogError("Invalid data. Username, unit, and lesson are required.");
             return;
         }
+
+        var progressData = new GameProgressData
+        {
+            Username = username, // Changed to match the property name in GameProgressData
+            unit = unit,
+            lesson = lesson,
+            reward = currentLessonInfo.rewardName,
+            message = currentLessonInfo.rewardMessage
+        };
 
         using (HttpClient client = new HttpClient())
         {
             try
             {
-                // Create progress data
-                var progressData = new
-                {
-                    username = username,
-                    unit = unit,
-                    lesson = lesson,
-                    timestamp = DateTime.UtcNow
-                };
-
                 string json = JsonUtility.ToJson(progressData);
                 Debug.Log($"Sending JSON: {json}");
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
+                string responseContent = await response.Content.ReadAsStringAsync();
+                
                 if (!response.IsSuccessStatusCode)
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
                     Debug.LogError($"Failed to save progress: {response.ReasonPhrase}. Response content: {responseContent}");
                 }
                 else
                 {
-                    Debug.Log("Progress saved successfully.");
+                    Debug.Log($"Progress saved successfully. Response: {responseContent}");
                 }
-            }
-            catch (HttpRequestException ex)
-            {
-                Debug.LogError($"HTTP request error: {ex.Message}");
             }
             catch (Exception ex)
             {
@@ -230,18 +232,10 @@ public class SceneTransition : MonoBehaviour
     // Helper method to get the current username
     private string GetCurrentUsername()
     {
-        if (usernameObject != null)
-        {
-            TMP_Text usernameText = usernameObject.GetComponent<TMP_Text>();
-            if (usernameText != null)
-            {
-                string username = usernameText.text;
-                Debug.Log($"Current Username from Text: {username}");
-                return username;
-            }
-        }
-        Debug.LogError("Failed to get username from text component.");
-        return UnknownUsername; // Default value if username can't be retrieved
+        // Always use the stored username from PlayerPrefs for API calls
+        string Username = PlayerPrefs.GetString("Username", UnknownUsername); //change string to Username? not username???
+        Debug.Log($"Using stored username for API call: {Username}"); 
+        return Username;
     }
 
     public void SetCurrentUnit(string unit)

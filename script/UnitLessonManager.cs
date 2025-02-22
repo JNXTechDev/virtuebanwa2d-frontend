@@ -44,8 +44,8 @@ public class UnitLessonManager : MonoBehaviour
     [SerializeField] private List<UnitData> units = new List<UnitData>();
 
     private string currentUsername;
-    //private const string baseUrl = "http://192.168.1.98:5000/api";
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+   // private const string baseUrl = "https://vbdb.onrender.com/api";
+ private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
 
 
     private void OnEnable()
@@ -78,25 +78,12 @@ public class UnitLessonManager : MonoBehaviour
         {
             Debug.Log("Initializing UnitLessonManager");
 
-            // Retrieve username from PlayManager with sanitization
-            string username = PlayManager.Instance.GetUsername();
-            currentUsername = SanitizeUsername(username);
-            Debug.Log($"Current Username: {currentUsername}");
+            currentUsername = PlayerPrefs.GetString("Username", "Unknown");
+            Debug.Log($"[UnitLessonManager] Using stored username: {currentUsername}");
 
             if (usernameText != null)
             {
-                if (!string.IsNullOrEmpty(currentUsername))
-                {
-                    usernameText.text = $"Player: {currentUsername}";
-                    Debug.Log($"Username set to: {currentUsername}");
-                }
-                else
-                {
-                    Debug.LogWarning("Username is not set in PlayManager, using PlayerPrefs");
-                    currentUsername = PlayerPrefs.GetString("CurrentUsername", "Unknown");
-                    currentUsername = SanitizeUsername(currentUsername);
-                    usernameText.text = $"Player: {currentUsername}";
-                }
+                usernameText.text = $"Player: {currentUsername}";
             }
             else
             {
@@ -157,10 +144,8 @@ public class UnitLessonManager : MonoBehaviour
         loadingPanel.SetActive(true);
         loadingText.text = $"Loading {unitName} - {lesson.lessonName}...";
 
-        // Save progress before loading the scene
         await SaveSceneTransitionProgress(currentUsername, unitName, lesson.lessonName);
 
-        // Load the scene
         SceneManager.LoadScene(lesson.defaultScene);
     }
 
@@ -179,13 +164,15 @@ public class UnitLessonManager : MonoBehaviour
                     string responseContent = await response.Content.ReadAsStringAsync();
                     Debug.Log($"Progress data loaded: {responseContent}");
 
-                    var progressData = JsonUtility.FromJson<UserProgressData>(responseContent);
+                    var progressData = JsonUtility.FromJson<GameProgress>(responseContent);
 
-                    if (progressData != null && progressData.progress != null && progressData.progress.Count > 0)
+                    if (progressData != null)
                     {
-                        foreach (var progress in progressData.progress)
+                        Debug.Log($"Tutorial Status: {progressData.tutorial.status}, Reward: {progressData.tutorial.reward}, Date: {progressData.tutorial.date}");
+
+                        foreach (var lesson in progressData.lessons)
                         {
-                            Debug.Log($"Unit: {progress.unit}, Lesson: {progress.lesson}, Timestamp: {progress.timestamp}");
+                            Debug.Log($"Lesson: {lesson.Key}, Status: {lesson.Value.status}, Reward: {lesson.Value.reward}, Date: {lesson.Value.date}");
                         }
                     }
                     else
@@ -211,56 +198,39 @@ public class UnitLessonManager : MonoBehaviour
 
     private async Task SaveSceneTransitionProgress(string username, string unitName, string lessonName)
     {
-        if (string.IsNullOrEmpty(username))
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(unitName) || string.IsNullOrEmpty(lessonName))
         {
-            Debug.LogError("Username is null or empty, cannot save progress.");
+            Debug.LogError($"[SaveProgress] Invalid data - Username: {username}, Unit: {unitName}, Lesson: {lessonName}");
             return;
         }
-        Debug.Log($"Saving progress for username: {username}, unit: {unitName}, lesson: {lessonName}");
 
-        string unit = unitName;
-        string lesson = lessonName;
+        Debug.Log($"[SaveProgress] Saving progress - Username: {username}, Unit: {unitName}, Lesson: {lessonName}");
 
-        try
+        var progressData = new GameProgressData
         {
-            var progressData = new
+            Username = username, // Changed from username to Username
+            unit = unitName,
+            lesson = lessonName
+        };
+
+        string json = JsonUtility.ToJson(progressData);
+        Debug.Log($"[SaveProgress] Sending JSON: {json}");
+
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        using (HttpClient client = new HttpClient())
+        {
+            HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
+            
+            string responseContent = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
             {
-                username = username,
-                unit = unit,
-                lesson = lesson
-            };
-
-            string json = JsonUtility.ToJson(progressData);
-            Debug.Log($"Sending JSON: {json}");
-
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            using (HttpClient client = new HttpClient())
-            {
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    Debug.Log($"Progress saved successfully. Response: {responseContent}");
-
-                    var responseData = JsonUtility.FromJson<ProgressResponse>(responseContent);
-                    Debug.Log($"Saved progress - Unit: {responseData.progress.unit}, Lesson: {responseData.progress.lesson}, Timestamp: {responseData.progress.timestamp}");
-                }
-                else
-                {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    Debug.LogError($"Failed to save progress: {response.ReasonPhrase}. Response content: {responseContent}");
-                }
+                Debug.Log($"[SaveProgress] Success. Response: {responseContent}");
             }
-        }
-        catch (HttpRequestException ex)
-        {
-            Debug.LogError($"HTTP request error: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            Debug.LogError($"Error saving progress: {ex.Message}");
+            else
+            {
+                Debug.LogError($"[SaveProgress] Failed - {response.ReasonPhrase}. Response: {responseContent}");
+            }
         }
     }
 
@@ -281,39 +251,8 @@ public class UnitLessonManager : MonoBehaviour
         }
     }
 
-    // Method to sanitize the username
     private string SanitizeUsername(string username)
     {
-        // Basic sanitization, adjust based on your needs
         return username.Replace(" ", "_").Replace(".", "-");
     }
-}
-
-[System.Serializable]
-public class UserProgressData
-{
-    public List<GameProgress> progress;
-}
-
-[System.Serializable]
-public class GameProgress
-{
-    public string unit;
-    public string lesson;
-    public string timestamp;
-}
-
-[System.Serializable]
-class ProgressResponse
-{
-    public string message;
-    public ProgressData progress;
-}
-
-[System.Serializable]
-class ProgressData
-{
-    public string unit;
-    public string lesson;
-    public string timestamp;
 }

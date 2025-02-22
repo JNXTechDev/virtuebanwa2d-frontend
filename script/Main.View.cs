@@ -293,7 +293,7 @@ public class MainView : MonoBehaviour
     private void DisplayPlayerProfileInfo()
     {
         // Retrieve user data from PlayerPrefs
-        string username = PlayerPrefs.GetString("Username");
+        string username = PlayerPrefs.GetString("Username");  
         string firstName = PlayerPrefs.GetString("FirstName");
         string lastName = PlayerPrefs.GetString("LastName");
         string section = PlayerPrefs.GetString("Section");
@@ -302,7 +302,7 @@ public class MainView : MonoBehaviour
         string rewards = PlayerPrefs.GetString("Rewards");
 
         // Update UI elements with user data
-        usernameText.text = $"#{username}";
+        usernameText.text = $"#{username}"; 
         detailText.text = $"{firstName} {lastName}";
         sectionText.text = $"{section}";
         roleText.text = $"{role}";

@@ -58,6 +58,9 @@ public class DynamicTable : MonoBehaviour
     public TMP_Text FeedbackText;
     public GameObject FeedbackPanel;
     public TMP_Dropdown selectDropdown; // Reference to the dropdown for selecting options
+    public TMP_Text statusText; // Reference to status text for progress updates
+    public TMP_Text studentusernameText; // Reference to status text for progress updates
+
 
     private Queue<string> debugLines = new Queue<string>();
     private const int MAX_DEBUG_LINES = 10; // Maximum number of lines to show
@@ -83,7 +86,10 @@ public class DynamicTable : MonoBehaviour
     private string selectedStudentFullName; // To store the full name of the selected student
 
     // Update the base URL to match other files
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+  //  private const string baseUrl = "https://vbdb.onrender.com/api";
+ private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
+
+
 
     private bool isRemovingStudent = false; // Flag to prevent multiple removals
     private bool isUploadInProgress = false; // Flag to track upload state
@@ -153,7 +159,11 @@ public class DynamicTable : MonoBehaviour
 
         Debug.Log($"[SendReward] JSON Payload: {jsonData}"); // ✅ Log the actual JSON
 
-        using (UnityWebRequest request = new UnityWebRequest("https://vbdb.onrender.com/api/users/rewards", "POST"))
+      //  using (UnityWebRequest request = new UnityWebRequest("https://vbdb.onrender.com/api/users/rewards", "POST"))
+
+        using (UnityWebRequest request = new UnityWebRequest("http://192.168.1.4:5000/api/users/rewards", "POST"))
+
+
         {
             request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonData));
             request.downloadHandler = new DownloadHandlerBuffer();
@@ -173,7 +183,6 @@ public class DynamicTable : MonoBehaviour
             }
         }
     }
-
 
     private IEnumerator VerifyDatabaseConnection()
     {
@@ -234,8 +243,6 @@ public class DynamicTable : MonoBehaviour
             Debug.LogError($"[DynamicTable] Critical error in Start: {ex.Message}\nStack trace: {ex.StackTrace}");
         }
     }
-
-
 
     private IEnumerator InitializeUIComponents()
     {
@@ -372,8 +379,6 @@ public class DynamicTable : MonoBehaviour
             ShowFeedback("Error loading data. Please check connection.");
         }
     }
-
-    
 
     private void ClearExistingRows()
     {
@@ -1297,35 +1302,243 @@ public class DynamicTable : MonoBehaviour
         {
             viewStudentPanel.SetActive(true);
 
+            // Get references to text components
             TMP_Text studentNameText = viewStudentPanel.transform.Find("StudentNameText")?.GetComponent<TMP_Text>();
             TMP_Text sectionText = viewStudentPanel.transform.Find("StudentSectionText")?.GetComponent<TMP_Text>();
             TMP_Text characterText = viewStudentPanel.transform.Find("StudentCharacterText")?.GetComponent<TMP_Text>();
 
-            if (studentNameText != null)
-            {
-                studentNameText.text = studentName;
-                Debug.Log($"[DynamicTable] Set student name: {studentName}");
-
-                // Set the selectedStudentFullName variable
-                selectedStudentFullName = studentName; // Assuming studentName is the full name
-            }
-
-            if (sectionText != null)
-            {
-                sectionText.text = sectionName;
-                Debug.Log($"[DynamicTable] Set section text to: {sectionName}");
-            }
-
-            // Get and set character
-            if (characterText != null)
-            {
-                StartCoroutine(SetCharacterText(studentName, characterText));
-            }
+            // Get the teacher's username
+            string teacherUsername = PlayerPrefs.GetString("Username");
+            string url = $"{baseUrl}/users?teacherUsername={Uri.EscapeDataString(teacherUsername)}";
+            
+            StartCoroutine(FetchStudentData(url, studentName, sectionName));
         }
         catch (Exception ex)
         {
             Debug.LogError($"[DynamicTable] Error in OnStudentClick: {ex.Message}");
+            if (studentusernameText != null)
+            {
+                studentusernameText.text = "Error loading username";
+            }
         }
+    }
+
+    private IEnumerator FetchStudentData(string url, string studentName, string sectionName)
+    {
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
+            request.SetRequestHeader("Content-Type", "application/json");
+            
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string responseText = request.downloadHandler.text;
+                Debug.Log($"[DynamicTable] Server response: {responseText}");
+                
+                try
+                {
+                    var students = JsonConvert.DeserializeObject<List<UserData>>(responseText);
+                    var student = students?.FirstOrDefault(s => 
+                        $"{s.FirstName} {s.LastName}".Equals(studentName, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (student != null)
+                    {
+                        // Update username text
+                        if (studentusernameText != null)
+                        {
+                            if (!string.IsNullOrEmpty(student.Username))
+                            {
+                                studentusernameText.text = student.Username;
+                                Debug.Log($"[DynamicTable] Set username text to: {student.Username}");
+
+                                // Update other UI elements
+                                UpdateStudentPanelUI(studentName, sectionName, student);
+                            }
+                            else
+                            {
+                                studentusernameText.text = "No username found";
+                                Debug.LogWarning("[DynamicTable] Username is null or empty in response");
+                            }
+                        }
+                        else
+                        {
+                            Debug.LogError("[DynamicTable] studentusernameText reference is null");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError($"[DynamicTable] Student not found: {studentName}");
+                        studentusernameText.text = "Student not found";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[DynamicTable] Error parsing user data: {ex.Message}");
+                    if (studentusernameText != null)
+                    {
+                        studentusernameText.text = "Error parsing data";
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogError($"[DynamicTable] Request failed: {request.error}\nResponse: {request.downloadHandler.text}");
+                if (studentusernameText != null)
+                {
+                    studentusernameText.text = "Error loading username";
+                }
+            }
+        }
+    }
+
+    private void UpdateStudentPanelUI(string studentName, string sectionName, UserData userData)
+    {
+        var studentNameText = viewStudentPanel.transform.Find("StudentNameText")?.GetComponent<TMP_Text>();
+        var sectionText = viewStudentPanel.transform.Find("StudentSectionText")?.GetComponent<TMP_Text>();
+        var characterText = viewStudentPanel.transform.Find("StudentCharacterText")?.GetComponent<TMP_Text>();
+      
+
+        if (studentNameText != null)
+        {
+            studentNameText.text = studentName;
+            selectedStudentFullName = studentName;
+        }
+
+        if (sectionText != null)
+        {
+            sectionText.text = sectionName;
+        }
+
+        if (characterText != null && !string.IsNullOrEmpty(userData?.Character))
+        {
+            characterText.text = userData.Character;
+        }
+
+        // After updating the UI, fetch the game progress using the username
+        if (!string.IsNullOrEmpty(userData?.Username))
+        {
+            StartCoroutine(FetchGameProgress(userData.Username));
+        }
+    }
+
+    private IEnumerator FetchGameProgress(string username)
+    {
+        Debug.Log($"[Progress] Fetching progress for username: {username}");
+        string url = $"{baseUrl}/game_progress/{Uri.EscapeDataString(username)}";
+
+        using (UnityWebRequest request = UnityWebRequest.Get(url))
+        {
+            request.certificateHandler = new NetworkUtility.BypassCertificateHandler();
+            request.SetRequestHeader("Content-Type", "application/json");
+            
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string responseText = request.downloadHandler.text;
+                Debug.Log($"[Progress] Server response: {responseText}");
+                
+                try
+                {
+                    var progressData = JsonConvert.DeserializeObject<GameProgressData>(responseText);
+                    DisplayProgressData(progressData);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[Progress] Error parsing progress data: {ex.Message}");
+                    if (statusText != null)
+                        statusText.text = "Error: Invalid progress data";
+                }
+            }
+            else
+            {
+                Debug.LogError($"[Progress] Failed to fetch progress: {request.error}");
+                if (statusText != null)
+                    statusText.text = "Error: Could not fetch progress";
+            }
+        }
+    }
+
+    private void DisplayProgressData(GameProgressData progress)
+    {
+        if (statusText == null)
+        {
+            Debug.LogError("[DynamicTable] statusText reference is missing!");
+            return;
+        }
+
+        if (progress == null)
+        {
+            statusText.text = "No progress data available";
+            return;
+        }
+
+        StringBuilder status = new StringBuilder();
+
+        // Display tutorial info
+        if (progress.tutorial != null)
+        {
+            status.AppendLine($"Tutorial:");
+            status.AppendLine($"• Status: {progress.tutorial.status}");
+            if (!string.IsNullOrEmpty(progress.tutorial.reward))
+            {
+                status.AppendLine($"• Reward: {progress.tutorial.reward}");
+            }
+            status.AppendLine();
+        }
+
+        // Display unit info
+        if (progress.units != null)
+        {
+            foreach (var unit in progress.units)
+            {
+                status.AppendLine($"Unit: {unit.Key}");
+                status.AppendLine($"• Status: {unit.Value.status}");
+                status.AppendLine($"• Completed Lessons: {unit.Value.completedLessons}");
+                status.AppendLine($"• Unit Score: {unit.Value.unitScore}%");
+
+                // Display lessons
+                if (unit.Value.lessons != null)
+                {
+                    status.AppendLine("\nLessons:");
+                    foreach (var lesson in unit.Value.lessons)
+                    {
+                        status.AppendLine($"  {lesson.Key}:");
+                        status.AppendLine($"  • Status: {lesson.Value.status}");
+                        if (!string.IsNullOrEmpty(lesson.Value.reward))
+                        {
+                            status.AppendLine($"  • Reward: {lesson.Value.reward}");
+                        }
+                        if (lesson.Value.score > 0)
+                        {
+                            status.AppendLine($"  • Score: {lesson.Value.score}%");
+                        }
+                    }
+                }
+
+                // Display post-test info
+                if (unit.Value.postTest != null)
+                {
+                    status.AppendLine("\nPost Test:");
+                    status.AppendLine($"• Status: {unit.Value.postTest.status}");
+                    if (unit.Value.postTest.score > 0)
+                    {
+                        status.AppendLine($"• Score: {unit.Value.postTest.score}%");
+                    }
+                    if (!string.IsNullOrEmpty(unit.Value.postTest.reward))
+                    {
+                        status.AppendLine($"• Reward: {unit.Value.postTest.reward}");
+                    }
+                }
+                
+                status.AppendLine("\n-------------------\n");
+            }
+        }
+
+        Debug.Log($"[Progress] Displaying progress data: {status}");
+        statusText.text = status.ToString();
     }
 
     public void CloseViewStudentPanel()
@@ -1610,6 +1823,9 @@ private (string firstName, string lastName) SplitFullName(string fullName)
         }
     }
 
+
+    
+
     // Combine the parts into first name and last name
     string firstName = string.Join(" ", parts.Take(lastNameStartIndex));
     string lastName = string.Join(" ", parts.Skip(lastNameStartIndex));
@@ -1831,130 +2047,20 @@ public async void OnRemoveStudentButtonClick()
 
         // Assign listeners for rewards panel
         sendRewardsButton.onClick.RemoveAllListeners();
-        sendRewardsButton.onClick.AddListener(ShowViewRewardsPanel);
+        sendRewardsButton.onClick.AddListener(() => ShowFeedback("Sending rewards..."));
 
         closeRewardsPanelButton.onClick.RemoveAllListeners();
         closeRewardsPanelButton.onClick.AddListener(CloseViewRewardsPanel);
 
+        removeStudentButton.onClick.RemoveAllListeners();
+        removeStudentButton.onClick.AddListener(OnRemoveStudentButtonClick);
 
-        closeSendRewardsButton.onClick.RemoveAllListeners();
-        closeSendRewardsButton.onClick.AddListener(CloseSendRewardsPanel);
-
-        // Add listener for remove student button
-        if (removeStudentButton != null)
-        {
-            removeStudentButton.onClick.RemoveAllListeners();
-            removeStudentButton.onClick.AddListener(OnRemoveStudentButtonClick);
-        }
-
-        // Update refresh button listener
-        if (refreshButton != null)
-        {
-            refreshButton.onClick.RemoveAllListeners();
-            refreshButton.onClick.AddListener(OnRefreshButtonClick);
-        }
-
-
-        // Check and request permissions for Android
-#if UNITY_ANDROID
-        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead))
-        {
-            Permission.RequestUserPermission(Permission.ExternalStorageRead);
-        }
-        if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
-        {
-            Permission.RequestUserPermission(Permission.ExternalStorageWrite);
-        }
-#endif
-    }
-
-    // Add this method to check UI setup
-    private void CheckUISetup()
-    {
-        if (tableParent != null)
-        {
-            var rectTransform = tableParent.GetComponent<RectTransform>();
-            rectTransform.sizeDelta = new Vector2(rectTransform.sizeDelta.x, 500); // Adjust height as needed
-
-            var contentSizeFitter = tableParent.GetComponent<ContentSizeFitter>();
-            var verticalLayoutGroup = tableParent.GetComponent<VerticalLayoutGroup>();
-
-            // Ensure the vertical layout group is set up correctly
-            if (verticalLayoutGroup != null)
-            {
-                verticalLayoutGroup.childForceExpandHeight = false;
-                verticalLayoutGroup.childAlignment = TextAnchor.UpperCenter;
-                verticalLayoutGroup.childControlWidth = true;
-                verticalLayoutGroup.childForceExpandWidth = true;
-                verticalLayoutGroup.spacing = 5;
-            }
-
-            // Ensure the content size fitter is set up correctly
-            if (contentSizeFitter != null)
-            {
-                contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            }
-        }
-    }
-
-    private void EnsureLayoutComponents()
-    {
-        if (tableParent != null)
-        {
-            var vlg = tableParent.GetComponent<VerticalLayoutGroup>();
-            if (vlg != null)
-            {
-                vlg.childForceExpandHeight = false; // Prevents rows from forcing height change
-            }
-
-            vlg.childAlignment = TextAnchor.UpperCenter;
-            vlg.childControlWidth = true;
-            vlg.childForceExpandWidth = true;
-            vlg.spacing = 5;
-
-            var csf = tableParent.GetComponent<ContentSizeFitter>();
-            if (csf == null) csf = tableParent.gameObject.AddComponent<ContentSizeFitter>();
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        }
-    }
-
-    private void LogUISetup()
-    {
-        Debug.Log("=== UI SETUP CHECK ===");
-        Debug.Log($"Screen Resolution: {Screen.width}x{Screen.height}");
-        Debug.Log($"TableParent Rect: {tableParent?.GetComponent<RectTransform>().rect}");
-    }
-
-    private void RegisterEncoding()
-    {
-        if (!encodingRegistered)
-        {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-            encodingRegistered = true;
-            Debug.Log("[DynamicTable] Encoding provider registered successfully");
-        }
-    }
-
-    private void UpdateContentHeight()
-    {
-        if (tableParent != null)
-        {
-            Canvas.ForceUpdateCanvases();
-            LayoutRebuilder.ForceRebuildLayoutImmediate(tableParent.GetComponent<RectTransform>());
-        }
-    }
-
-    private IEnumerator DelayedScrollbarRefresh()
-    {
-        Canvas.ForceUpdateCanvases();
-        yield return new WaitForEndOfFrame();
+        refreshButton.onClick.RemoveAllListeners();
+        refreshButton.onClick.AddListener(OnRefreshButtonClick);
     }
 
     private void ShowFeedback(string message)
     {
-        Debug.Log($"[DynamicTable] Showing feedback: {message}");
-        
-        // First ensure the FeedbackPanel exists and is referenced
         if (FeedbackPanel == null)
         {
             Debug.LogError("[DynamicTable] FeedbackPanel reference is missing!");
@@ -1995,21 +2101,47 @@ public async void OnRemoveStudentButtonClick()
             FeedbackPanel.SetActive(false);
         }
     }
-}
 
-// Add these classes to handle the JSON response
-[Serializable]
-    public class StudentListResponse
+    private void RegisterEncoding()
     {
-        public UserData[] users;
-    }
-
-    public static class UnityWebRequestExtensions
-    {
-        public static TaskAwaiter<UnityWebRequest> GetAwaiter(this UnityWebRequestAsyncOperation operation)
+        if (!encodingRegistered)
         {
-            var tcs = new TaskCompletionSource<UnityWebRequest>();
-            operation.completed += asyncOp => tcs.TrySetResult(((UnityWebRequestAsyncOperation)asyncOp).webRequest);
-            return tcs.Task.GetAwaiter();
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            encodingRegistered = true;
         }
     }
+
+    private void UpdateContentHeight()
+    {
+        if (scrollRect != null && scrollRect.content != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(scrollRect.content);
+            Canvas.ForceUpdateCanvases();
+        }
+    }
+
+    private IEnumerator DelayedScrollbarRefresh()
+    {
+        yield return null; // Wait one frame
+        if (scrollRect != null)
+        {
+            scrollRect.verticalScrollbar.value = 1; // Reset scrollbar to top
+        }
+    }
+}
+
+public static class UnityWebRequestExtensions
+{
+    public static TaskAwaiter<UnityWebRequest> GetAwaiter(this UnityWebRequestAsyncOperation operation)
+    {
+        var tcs = new TaskCompletionSource<UnityWebRequest>();
+        operation.completed += asyncOp => tcs.TrySetResult(((UnityWebRequestAsyncOperation)asyncOp).webRequest);
+        return tcs.Task.GetAwaiter();
+    }
+}
+
+[System.Serializable]
+public class StudentListResponse
+{
+    public UserData[] users;
+}
