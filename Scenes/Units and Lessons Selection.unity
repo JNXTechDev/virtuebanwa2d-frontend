@@ -333,6 +333,109 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 277699985}
   m_CullTransparentMesh: 1
+--- !u!1 &517269852
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 517269853}
+  - component: {fileID: 517269857}
+  - component: {fileID: 517269856}
+  - component: {fileID: 517269855}
+  - component: {fileID: 517269854}
+  m_Layer: 5
+  m_Name: FadePanel
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!224 &517269853
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517269852}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1.5999999, y: 1.5999999, z: 1.5999999}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1441139544}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: -480, y: -270}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &517269854
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517269852}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3fac7b0d86add48448c24e5f018c8907, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  fadeCanvasGroup: {fileID: 517269855}
+  fadeDuration: 1
+--- !u!225 &517269855
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517269852}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!114 &517269856
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517269852}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  m_Type: 1
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &517269857
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 517269852}
+  m_CullTransparentMesh: 1
 --- !u!1 &518460972
 GameObject:
   m_ObjectHideFlags: 0
@@ -1362,69 +1465,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1279437808}
-  - component: {fileID: 1279437807}
+  - component: {fileID: 1279437809}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: Unit and Lesson Manager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1279437807
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1279437806}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a8b8f64c7acfc764fad5bebe5d8ac0e6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  unitButtonContainer: {fileID: 1741760051}
-  unitButtonPrefab: {fileID: 6378470989736229316, guid: ed25ed79c1b1a4b4a9c35f35400146be, type: 3}
-  lessonSelectionPanel: {fileID: 1196925188}
-  lessonButtonContainer: {fileID: 55847794}
-  lessonButtonPrefab: {fileID: 3480236968744122303, guid: 865b4724a0403b54bb258c06af1005d2, type: 3}
-  usernameText: {fileID: 1591366049}
-  loadingPanel: {fileID: 1968461951}
-  loadingText: {fileID: 277699987}
-  backButton: {fileID: 1685893558}
-  units:
-  - unitName: TUTORIAL
-    lessons:
-    - lessonName: TUTORIAL
-      defaultScene: nene mainview
-      isUnlocked: 1
-      lastCheckpoint: 
-    isUnlocked: 1
-  - unitName: Unit 1
-    lessons:
-    - lessonName: 'Lesson 1 '
-      defaultScene: Enter School View(Lesson 1)
-      isUnlocked: 1
-      lastCheckpoint: 
-    - lessonName: 'Lesson 2 '
-      defaultScene: Enter Plaza(Lesson 2)
-      isUnlocked: 1
-      lastCheckpoint: 
-    isUnlocked: 1
-  - unitName: Unit 2
-    lessons:
-    - lessonName: Tutorial
-      defaultScene: nene mainview
-      isUnlocked: 1
-      lastCheckpoint: 
-    - lessonName: Lesson 1
-      defaultScene: Enter Plaza(Lesson 1)
-      isUnlocked: 1
-      lastCheckpoint: 
-    - lessonName: Lesson 2
-      defaultScene: Enter Plaza(Lesson 2)
-      isUnlocked: 1
-      lastCheckpoint: 
-    isUnlocked: 1
 --- !u!4 &1279437808
 Transform:
   m_ObjectHideFlags: 0
@@ -1440,6 +1488,35 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1279437809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1279437806}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1c06a54a049953940a17107fca11acc8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  unitButtonContainer: {fileID: 1741760051}
+  unitButtonPrefab: {fileID: 6378470989736229316, guid: 8c9ebe612af6c164692133e5e7ab3169, type: 3}
+  lessonSelectionPanel: {fileID: 1196925188}
+  lessonButtonContainer: {fileID: 55847794}
+  lessonButtonPrefab: {fileID: 3480236968744122303, guid: 7f79cf08a3b9a4f4ebbc26a46bae9e55, type: 3}
+  usernameText: {fileID: 1591366049}
+  loadingPanel: {fileID: 1968461951}
+  loadingText: {fileID: 277699987}
+  backButton: {fileID: 1685893558}
+  units:
+  - unitName: TUTORIAL
+    lessons:
+    - lessonName: TUTORIAL
+      defaultScene: nene mainview
+      isUnlocked: 1
+      lastCheckpoint: 
+    isUnlocked: 1
 --- !u!1 &1424594863
 GameObject:
   m_ObjectHideFlags: 0
@@ -1576,6 +1653,7 @@ RectTransform:
   - {fileID: 1196925189}
   - {fileID: 1968461952}
   - {fileID: 1185049716}
+  - {fileID: 517269853}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -1695,8 +1773,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 620.7, y: -58}
-  m_SizeDelta: {x: 1277, y: 100.95}
+  m_AnchoredPosition: {x: 629.7873, y: -60.242706}
+  m_SizeDelta: {x: 392.5021, y: 96.4063}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1591366049
 MonoBehaviour:
@@ -1720,8 +1798,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: New Text
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: a47797a3b33a2314bad1b32b2c879636, type: 2}
-  m_sharedMaterial: {fileID: 3216978548812754499, guid: a47797a3b33a2314bad1b32b2c879636, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 70d64819513345e4faabefb6fd3c6581, type: 2}
+  m_sharedMaterial: {fileID: -4281515187160471319, guid: 70d64819513345e4faabefb6fd3c6581, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -2175,6 +2253,54 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!1 &1824100485
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1824100487}
+  - component: {fileID: 1824100486}
+  m_Layer: 0
+  m_Name: PlaymangerSupport
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1824100486
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1824100485}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bfc7e943e0018e4eb3fbe99b0d19199, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  usernameText: {fileID: 0}
+  playButton: {fileID: 0}
+  defaultStudentScene: nene mainview
+  defaultTeacherScene: Teacher.Main.View
+--- !u!4 &1824100487
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1824100485}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 713.60046, y: 452.63013, z: -3.9589257}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1914285416
 GameObject:
   m_ObjectHideFlags: 0
@@ -2478,3 +2604,4 @@ SceneRoots:
   - {fileID: 1447387455}
   - {fileID: 1279437808}
   - {fileID: 1228606032}
+  - {fileID: 1824100487}
