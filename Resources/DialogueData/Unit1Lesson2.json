@@ -1,0 +1,248 @@
+[
+    {
+        "id": "story1",
+        "sceneToLoad": "school",
+        "title": "Be Friendly",
+        "npcName": "New Student",
+        "initialNarration": "You are at school, and you notice nga may new student nga nagapungko sa likod sang classroom, nagaisahanon. You remember how difficult it can be to be new, so you decide to approach them. As you walk over, gapaminsar ka kung ano ang best way to make them feel comfortable. You smile, wave, kag think of what to say.",
+        "initialDialogue": "What should you do para e introduce ang imo self para mapakomfortable ang new student kag feel welcome?",
+        "choices": [
+            {
+                "text": "Approach with smile, say 'Hello', introduce yourself, ask 'Ano ang imo ngalan?' and invite them to recess",
+                "response": "You showed kindness, friendliness, and nagpakita sang genuine effort nga mag-upod sa ila sa grupo.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Outstanding! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "Just smile and say 'Hello' then walk away",
+                "response": "While you made an effort to greet them, you missed the chance nga mas makilala sila or to fully break the ice.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Keep practicing! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Just look at them and ignore",
+                "response": "By not acknowledging the new student, or showing indifference, makapabatyag ka sang awkwardness kag mas mapalayo sila.",
+                "reward": {
+                    "type": "NoStar",
+                    "message": "Try again! Score: 0/30",
+                    "sprite": "NoStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Being friendly and welcoming to new students helps create a positive classroom environment and makes everyone feel valued."
+    },
+    {
+        "id": "story2",
+        "sceneToLoad": "school",
+        "title": "Be A Good Listener",
+        "npcName": "New Student",
+        "initialNarration": "Nakilala mo ang new student sa school, and you decide nga gusto mo sila makilala better. As they talk about their family and interests, you remind yourself to be a good listener. Ga-nod ka, naga-maintain eye contact, kag nagapakita ka sang interest sa ila mga istorya.",
+        "initialDialogue": "Paano mo mapakita nga isa ka maayo nga listener kag mapabatyag ang new friend nga valued sila?",
+        "choices": [
+            {
+                "text": "Listen attentively, maintain eye contact, mag-nod ka sa iya nga ginaistorya, kag nagapangutana ka pa like, 'So, ano pa ang mga gusto mo himuon for fun?'",
+                "response": "You showed genuine interest and made your new friend feel valued through active listening.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Excellent listening skills! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "Nagapamati ka pero every now and then, distracted ka kay naga-check ka sang phone mo or ga-tan-aw sa palibot",
+                "response": "While you tried to listen, your distractions showed lack of full attention.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Keep practicing! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Ginalikawan mo sila or ginaputol mo ang ila istorya",
+                "response": "Not listening and interrupting others makes them feel unvalued and disrespected.",
+                "reward": {
+                    "type": "NoStar",
+                    "message": "Try again! Score: 0/30",
+                    "sprite": "NoStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Being a good listener shows respect and helps build stronger friendships."
+    },
+    {
+        "id": "story3",
+        "sceneToLoad": "playground",
+        "title": "Be Yourself",
+        "npcName": "New Friend",
+        "initialNarration": "You are at the playground and want to make new friends. You remember nga importante nga maging ikaw mismo kag indi magpretend nga gusto mo ang isa ka bagay just to please others.",
+        "initialDialogue": "Paano mo mapakita nga ikaw mismo ka lang kag paano mo i-handle ang sitwasyon kung ang iba wala gusto magdula upod sa imo?",
+        "choices": [
+            {
+                "text": "Introduce yourself and share your genuine interests, like 'I really enjoy playing soccer. Gusto mo magdula upod sa akon?'",
+                "response": "Being honest about your interests helps you find true friends who appreciate you for who you are.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Great self-expression! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "You talk about your interests pero nag-agree ka mag-upod sa ila dula bisan indi mo gusto",
+                "response": "While trying to be friendly is good, it's important to stay true to yourself.",
+                "reward": {
+                    "type": "TwoStar",
+                    "message": "Stay true to yourself! Score: 20/30",
+                    "sprite": "TwoStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Pretend to like their game just to be accepted",
+                "response": "Pretending to be someone you're not doesn't lead to genuine friendships.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Be yourself! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Being yourself helps you make genuine friends who appreciate you for who you are."
+    },
+    {
+        "id": "story4",
+        "sceneToLoad": "playground",
+        "title": "Be Kind and Respectful",
+        "npcName": "Friend",
+        "initialNarration": "You and your friend are trying to decide what game to play. Sometimes, you might not agree with each other. You remember nga importante nga maging kind kag respectful.",
+        "initialDialogue": "Paano mo mapakita ang kindness kag respeto bisan kung may disagreement kamo sang imo friend?",
+        "choices": [
+            {
+                "text": "Listen attentively sa imo friend's suggestions, mag-take turns kamo mag-express sang imo mga gusto, kag find a compromise",
+                "response": "You showed maturity by finding a solution that respects both sides.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Excellent problem-solving! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "Listen to your friend pero magpili ka sang imo gusto without considering their opinion",
+                "response": "While you listened, not considering their feelings shows lack of respect.",
+                "reward": {
+                    "type": "TwoStar",
+                    "message": "Consider others' feelings! Score: 20/30",
+                    "sprite": "TwoStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Insist on your own choice without listening to your friend",
+                "response": "Being stubborn and disrespectful can damage friendships.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Work on respect! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Being kind and respectful, even during disagreements, helps maintain strong friendships."
+    },
+    {
+        "id": "story5",
+        "sceneToLoad": "house",
+        "title": "Be Sincere",
+        "npcName": "Classmate",
+        "initialNarration": "You're working on a group project with your classmates. You remember nga importante nga maging sincere sa tanan nga tion.",
+        "initialDialogue": "Paano mo mapakita ang sincerity sa imo grupo nga project?",
+        "choices": [
+            {
+                "text": "Share your honest opinions and ideas openly, be consistent with your actions, and accept feedback",
+                "response": "Your sincerity helps build trust and creates better teamwork.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Great sincerity! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "Participate but hold back some opinions to avoid conflict",
+                "response": "While avoiding conflict is understandable, full honesty builds stronger relationships.",
+                "reward": {
+                    "type": "TwoStar",
+                    "message": "Be more open! Score: 20/30",
+                    "sprite": "TwoStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Pretend to agree with everything just to avoid problems",
+                "response": "Insincerity can lead to misunderstandings and weak relationships.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Practice honesty! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Sincerity builds trust and creates stronger relationships with others."
+    },
+    {
+        "id": "story6",
+        "sceneToLoad": "house",
+        "title": "Be True and Sincere to Family",
+        "npcName": "Parent",
+        "initialNarration": "At home, you're having a family dinner. You remember nga importante nga maging true kag sincere, indi lang sa imo mga classmates kag playmates, kundi pati man sa imo pamilya.",
+        "initialDialogue": "Paano mo mapakita ang sincerity sa imo pamilya samtang nagahimo ka sang family dinner?",
+        "choices": [
+            {
+                "text": "Share your honest thoughts and feelings during dinner, listen attentively, and show genuine interest",
+                "response": "Your openness and sincerity strengthens family bonds.",
+                "reward": {
+                    "type": "ThreeStar",
+                    "message": "Excellent family interaction! Score: 30/30",
+                    "sprite": "ThreeStar",
+                    "score": 30
+                }
+            },
+            {
+                "text": "Participate in conversation but hold back some feelings",
+                "response": "While participating is good, being fully open with family builds stronger connections.",
+                "reward": {
+                    "type": "TwoStar",
+                    "message": "Share more with family! Score: 20/30",
+                    "sprite": "TwoStar",
+                    "score": 20
+                }
+            },
+            {
+                "text": "Just say what others want to hear without being genuine",
+                "response": "Lack of sincerity with family can weaken important relationships.",
+                "reward": {
+                    "type": "OneStar",
+                    "message": "Be more sincere! Score: 10/30",
+                    "sprite": "OneStar",
+                    "score": 10
+                }
+            }
+        ],
+        "lessonLearned": "Being true and sincere with family creates stronger bonds and a more supportive home environment."
+    }
+]

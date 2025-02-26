@@ -1,0 +1,43 @@
+{
+    "npcName": "Annie",
+    "title": "I Know Myself (Self-Confidence)",
+    "subtitle": "My First Day of School",
+    "setting": "School Entrance",
+    "initialNarration": "It's the first day of school, and you feel excited yet a bit nervous. You notice a girl wearing a name tag with the same color as yours. She seems friendly.",
+    "initialDialogue": "Hi, my name is Annie. Nice to meet you!",
+    "npcResponse": "Hello! I'm Annie. Nice to meet you. I'm glad you came over to say hi!",
+    "narrationPrompt": "What should be the best response?",
+    "choices": [
+        {
+            "text": "Nice to meet you too, Annie! We have the same color name tag! What section are you in?",
+            "response": "Perfect! You showed great social skills by being friendly and asking a relevant question!",
+            "reward": {
+                "type": "ThreeStar",
+                "message": "Outstanding! Score: 30/30",
+                "sprite": "ThreeStar",
+                "score": 30
+            }
+        },
+        {
+            "text": "Nice to meet you, Annie!",
+            "response": "Good effort! You were polite, but try adding a question next time to keep the conversation going.",
+            "reward": {
+                "type": "TwoStar",
+                "message": "Keep practicing! Score: 20/30",
+                "sprite": "TwoStar",
+                "score": 20
+            }
+        },
+        {
+            "text": "*Walk away without saying anything else*",
+            "response": "Remember, it's important to engage in conversation when someone introduces themselves.",
+            "reward": {
+                "type": "OneStar",
+                "message": "Try again! Score: 10/30",
+                "sprite": "OneStar",
+                "score": 10
+            }
+        }
+    ],
+    "lessonLearned": "Approaching someone and introducing yourself is a great first step to making new friends. Just remember to show interest in the other person by asking questions and listening to what they have to say!"
+}
