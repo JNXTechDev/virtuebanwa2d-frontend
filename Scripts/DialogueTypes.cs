@@ -1,5 +1,6 @@
 using UnityEngine;
 using System;
+using System.Collections.Generic;
 
 namespace VirtueBanwa
 {
@@ -18,6 +19,15 @@ namespace VirtueBanwa
         public string lessonLearned;
         public string id;
         public string sceneToLoad; // Add this field
+
+        // Change this method to be virtual so it can be overridden
+        public virtual void ClearData()
+        {
+            npcName = "";
+            initialDialogue = "";
+            lessonLearned = "";
+            choices = new Choice[0];
+        }
     }
 
     [Serializable]
@@ -26,6 +36,7 @@ namespace VirtueBanwa
         public string text;
         public string response;
         public Reward reward;
+        public string sceneToLoad; // Add this field for scene transitions
     }
 
     [Serializable]
@@ -54,5 +65,15 @@ namespace VirtueBanwa
         public string congratsMessage;
         public UnityEngine.Sprite rewardSprite;
         public string rewardText;
+    }
+
+    [Serializable]
+    public class LessonProgress
+    {
+        public string status;
+        public string reward;
+        public int score;
+        public DateTime lastAttempt;
+        public List<string> npcsTalkedTo; // Add this field
     }
 }

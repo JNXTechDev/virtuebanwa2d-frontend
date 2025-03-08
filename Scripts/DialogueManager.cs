@@ -18,11 +18,11 @@ public class DialogueManager : MonoBehaviour
     
     [Header("Configuration")]
     public float typingSpeed = 0.05f;
-    public string lessonFile = "lesson1";
+    public string lessonFile = "lesson1";  // This is used by Unit1Lesson1Controller
 
-    private DialogueData currentDialogue;
+    private VirtueBanwa.DialogueData currentDialogue;
     private bool isInDialogue = false;
-    private List<DialogueData> currentLessonStories;
+    private List<VirtueBanwa.DialogueData> currentLessonStories;
     private int currentStoryIndex = 0;
 
     void Start()
@@ -59,7 +59,7 @@ public class DialogueManager : MonoBehaviour
         // For Lesson 1 (single story)
         else
         {
-            currentDialogue = JsonUtility.FromJson<DialogueData>(jsonFile.text);
+            currentDialogue = JsonUtility.FromJson<VirtueBanwa.DialogueData>(jsonFile.text);
         }
 
         // Ensure intro dialogue panel shows correct text
@@ -72,7 +72,7 @@ public class DialogueManager : MonoBehaviour
     [System.Serializable]
     private class StoriesWrapper
     {
-        public List<DialogueData> stories;
+        public List<VirtueBanwa.DialogueData> stories;
     }
 
     public void StartDialogue()
@@ -98,7 +98,7 @@ public class DialogueManager : MonoBehaviour
 
     void ShowChoices()
     {
-        for (int i = 0; i < choiceButtons.Length; i++)
+        for (int i = 0; i < choiceButtons.Length && i < currentDialogue.choices.Length; i++)
         {
             choiceButtons[i].SetActive(true);
             choiceButtons[i].GetComponentInChildren<TextMeshProUGUI>().text = 
@@ -106,13 +106,14 @@ public class DialogueManager : MonoBehaviour
         }
     }
 
+    // This method is used by Unit1Lesson1Controller
     public void OnChoiceSelected(int choice)
     {
         HideChoices();
         StartCoroutine(ShowRewardSequence(currentDialogue.choices[choice]));
     }
 
-    IEnumerator ShowRewardSequence(Choice choice)
+    IEnumerator ShowRewardSequence(VirtueBanwa.Choice choice)
     {
         // Show NPC response
         yield return TypeDialogue(choice.response);
@@ -121,7 +122,17 @@ public class DialogueManager : MonoBehaviour
         // Show reward
         rewardPanel.SetActive(true);
         rewardText.text = choice.reward.message;
-        rewardImage.sprite = Resources.Load<Sprite>($"Rewards/{choice.reward.sprite}");
+        string rewardPath = $"Rewards/{choice.reward.sprite}";
+        Sprite rewardSprite = Resources.Load<Sprite>(rewardPath);
+        
+        if (rewardSprite != null)
+        {
+            rewardImage.sprite = rewardSprite;
+        }
+        else
+        {
+            Debug.LogError($"Could not load reward sprite at {rewardPath}");
+        }
 
         yield return new WaitForSeconds(3f);
         HideAllPanels();
@@ -130,8 +141,12 @@ public class DialogueManager : MonoBehaviour
 
     void HideAllPanels()
     {
-        dialoguePanel.SetActive(false);
-        rewardPanel.SetActive(false);
+        if (dialoguePanel != null)
+            dialoguePanel.SetActive(false);
+            
+        if (rewardPanel != null)
+            rewardPanel.SetActive(false);
+            
         HideChoices();
     }
 
@@ -139,7 +154,14 @@ public class DialogueManager : MonoBehaviour
     {
         foreach (GameObject button in choiceButtons)
         {
-            button.SetActive(false);
+            if (button != null)
+                button.SetActive(false);
         }
+    }
+    
+    // Additional methods to avoid conflicts with DialogueFileManager
+    public void SetDialogueFile(string filename)
+    {
+        lessonFile = filename;
     }
 }
