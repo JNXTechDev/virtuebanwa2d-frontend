@@ -5,7 +5,10 @@ using System.Threading.Tasks;
 using System.Net.Http;
 using System.Text;
 using System;
+using System.Collections.Generic;
 using UnityEngine.UI;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq; // Add this for JObject instead of dynamic
 
 public class MainView : MonoBehaviour
 {
@@ -40,8 +43,9 @@ public class MainView : MonoBehaviour
     public Sprite girlHead;
 
     // MongoDB API URL
-  //  private const string baseUrl = "http://192.168.1.98:5000/api";
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+ // Base URL for the API
+    private string baseUrl => NetworkConfig.BaseUrl; 
+
 
 
     // Camera Follow reference
@@ -55,6 +59,12 @@ public class MainView : MonoBehaviour
         InitializeUI();
         interactButton.SetActive(true);
         DisplayPlayerInfo();
+        
+        // Make sure dialogue panels are hidden at start
+        if (DialogueBoxPanel != null)
+        {
+            DialogueBoxPanel.SetActive(false);
+        }
     }
 
     // Display player information using PlayerPrefs
@@ -187,7 +197,7 @@ public class MainView : MonoBehaviour
     {
         if (profilePictureButton != null)
         {
-            profilePictureButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(OnProfilePictureButtonClicked);
+            profilePictureButton.GetComponent<Button>().onClick.AddListener(OnProfilePictureButtonClicked);
         }
         else
         {
@@ -196,7 +206,7 @@ public class MainView : MonoBehaviour
 
         if (profileExitButton != null)
         {
-            profileExitButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(OnProfileExitButtonClicked);
+            profileExitButton.GetComponent<Button>().onClick.AddListener(OnProfileExitButtonClicked);
         }
         else
         {
@@ -251,12 +261,26 @@ public class MainView : MonoBehaviour
         GameObject logoutButton = GameObject.Find("LogoutButton");
         if (logoutButton != null)
         {
-            logoutButton.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(Logout);
+            logoutButton.GetComponent<Button>().onClick.AddListener(Logout);
         }
         else
         {
             Debug.LogError("LogoutButton reference is not set in the Inspector.");
         }
+
+        // Add refresh button listener
+        GameObject refreshButton = GameObject.Find("RefreshButton");
+        if (refreshButton != null)
+        {
+            refreshButton.GetComponent<Button>().onClick.AddListener(FetchPlayerProgress);
+        }
+        else
+        {
+            Debug.LogError("RefreshButton not found in the scene.");
+        }
+        
+        // Fetch progress initially
+        FetchPlayerProgress();
     }
 
     // Update method for frame updates
@@ -298,16 +322,15 @@ public class MainView : MonoBehaviour
         string lastName = PlayerPrefs.GetString("LastName");
         string section = PlayerPrefs.GetString("Section");
         string role = PlayerPrefs.GetString("Role");
-        string progress = PlayerPrefs.GetString("Progress");
-        string rewards = PlayerPrefs.GetString("Rewards");
-
+        
         // Update UI elements with user data
         usernameText.text = $"#{username}"; 
         detailText.text = $"{firstName} {lastName}";
         sectionText.text = $"{section}";
         roleText.text = $"{role}";
-        progressText.text = $"{progress}";
-        rewardText.text = $"{rewards}";
+        
+        // Fetch the latest progress data from API instead of using PlayerPrefs
+        FetchPlayerProgress();
     }
 
     // Handle profile picture button click
@@ -400,5 +423,255 @@ public class MainView : MonoBehaviour
     {
         playerNameText.text = "Player: Unknown";
         classroomNameText.text = "Section: Not enrolled.";
+    }
+
+    // Method to fetch player progress from the API
+    public async void FetchPlayerProgress()
+    {
+        try
+        {
+            string username = PlayerPrefs.GetString("Username");
+            if (string.IsNullOrEmpty(username))
+            {
+                Debug.LogError("Username is not set in PlayerPrefs.");
+                if (progressText != null)
+                    progressText.text = "Progress: Not available";
+                if (rewardText != null)
+                    rewardText.text = "Rewards: Not available";
+                return;
+            }
+
+            // Show loading indicator
+            if (progressText != null)
+                progressText.text = "Progress: Loading...";
+            if (rewardText != null)
+                rewardText.text = "Rewards: Loading...";
+
+            using (HttpClient client = new HttpClient())
+            {
+                HttpResponseMessage response = await client.GetAsync($"{baseUrl}/game_progress/{username}");
+                if (response.IsSuccessStatusCode)
+                {
+                    string responseContent = await response.Content.ReadAsStringAsync();
+                    Debug.Log($"Progress data: {responseContent}");
+
+                    // Parse the JSON using JObject instead of dynamic
+                    JObject progressData = JsonConvert.DeserializeObject<JObject>(responseContent);
+                    
+                    if (progressData != null)
+                    {
+                        // Format the progress data for display
+                        string formattedProgress = FormatProgressData(progressData);
+                        string formattedRewards = FormatRewardsData(progressData);
+                        
+                        // Update UI
+                        if (progressText != null)
+                            progressText.text = formattedProgress;
+                        if (rewardText != null)
+                            rewardText.text = formattedRewards;
+                        
+                        Debug.Log($"Progress updated: {formattedProgress}");
+                    }
+                    else
+                    {
+                        Debug.LogError("Failed to parse progress data");
+                        if (progressText != null)
+                            progressText.text = "Progress: Data format error";
+                    }
+                }
+                else
+                {
+                    Debug.LogError($"Error fetching progress: {response.StatusCode}");
+                    if (progressText != null)
+                        progressText.text = "Progress: Failed to load";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error fetching player progress: {ex.Message}");
+            if (progressText != null)
+                progressText.text = "Progress: Error loading data";
+        }
+    }
+
+    // Helper method to format progress data for display
+    private string FormatProgressData(JObject data)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.AppendLine("Progress Summary:");
+        
+        // Tutorial progress - check all NPCs
+        string tutorialStatus = "Not Started";
+        int completedNPCs = 0;
+        string[] requiredNPCs = { "Janica", "Mark", "Annie", "Rojan" };
+        
+        // Safely access tutorial status with null checks
+        JToken tutorialToken = data["tutorial"];
+        if (tutorialToken != null)
+        {
+            JToken checkpointsToken = tutorialToken["checkpoints"];
+            if (checkpointsToken != null)
+            {
+                // Count completed NPCs
+                foreach (string npc in requiredNPCs)
+                {
+                    if (checkpointsToken[npc] != null && 
+                        checkpointsToken[npc]["status"]?.ToString() == "Completed")
+                    {
+                        completedNPCs++;
+                    }
+                }
+            }
+            
+            // Set status based on NPC completion
+            if (completedNPCs == requiredNPCs.Length)
+            {
+                tutorialStatus = "Completed";
+            }
+            else if (completedNPCs > 0)
+            {
+                tutorialStatus = "In Progress";
+            }
+        }
+        
+        sb.AppendLine($"Tutorial: {tutorialStatus}");
+        
+        // Rest of the progress formatting
+        int completedUnits = 0;
+        int completedLessons = 0;
+        
+        try
+        {
+            // Count completed units and lessons
+            JToken unitsToken = data["units"];
+            if (unitsToken != null)
+            {
+                foreach (JProperty unitProp in unitsToken)
+                {
+                    JToken unitValue = unitProp.Value;
+                    
+                    // Check if unit is completed
+                    if (unitValue["status"] != null && unitValue["status"].ToString() == "Completed")
+                    {
+                        completedUnits++;
+                    }
+                    
+                    // Check lessons
+                    JToken lessonsToken = unitValue["lessons"];
+                    if (lessonsToken != null)
+                    {
+                        foreach (JProperty lessonProp in lessonsToken)
+                        {
+                            JToken lessonValue = lessonProp.Value;
+                            
+                            // Check if lesson is completed
+                            if (lessonValue["status"] != null && lessonValue["status"].ToString() == "Completed")
+                            {
+                                completedLessons++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Error counting progress: {ex.Message}");
+        }
+        
+        sb.AppendLine($"Units: {completedUnits}/4 completed");
+        sb.AppendLine($"Lessons: {completedLessons}/24 completed");
+        
+        return sb.ToString();
+    }
+
+    // Helper method to format rewards data for display
+    private string FormatRewardsData(JObject data)
+    {
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+        sb.AppendLine("Rewards Collected:");
+        int totalStars = 0;
+        
+        try
+        {
+            // Count tutorial stars
+            JToken tutorialToken = data["tutorial"];
+            JToken checkpointsToken = tutorialToken?["checkpoints"];
+            
+            if (checkpointsToken != null)
+            {
+                foreach (JProperty checkpoint in checkpointsToken)
+                {
+                    JToken rewardToken = checkpoint.Value["reward"];
+                    string reward = rewardToken?.ToString() ?? "";
+                    
+                    if (!string.IsNullOrEmpty(reward))
+                    {
+                        totalStars += GetStarValue(reward);
+                        sb.AppendLine($"• {checkpoint.Name}: {FormatRewardName(reward)}");
+                    }
+                }
+            }
+            
+            // Count unit/lesson stars
+            JToken unitsToken = data["units"];
+            if (unitsToken != null)
+            {
+                foreach (JProperty unit in unitsToken)
+                {
+                    JToken lessonsToken = unit.Value["lessons"];
+                    if (lessonsToken != null)
+                    {
+                        foreach (JProperty lesson in lessonsToken)
+                        {
+                            JToken rewardToken = lesson.Value["reward"];
+                            string reward = rewardToken?.ToString() ?? "";
+                            
+                            if (!string.IsNullOrEmpty(reward))
+                            {
+                                totalStars += GetStarValue(reward);
+                                sb.AppendLine($"• {unit.Name} {lesson.Name}: {FormatRewardName(reward)}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"Error counting rewards: {ex.Message}");
+        }
+        
+        sb.Insert(0, $"Total Stars Earned: {totalStars}\n");
+        
+        return sb.ToString();
+    }
+
+    private int GetStarValue(string rewardType)
+    {
+        switch (rewardType)
+        {
+            case "OneStar": return 1;
+            case "TwoStar": return 2;
+            case "ThreeStar": return 3;
+            case "FourStar": return 4;
+            case "FiveStar": return 5;
+            default: return 0;
+        }
+    }
+
+    // Add this new helper method
+    private string FormatRewardName(string rewardType)
+    {
+        switch (rewardType)
+        {
+            case "OneStar": return "1 Star";
+            case "TwoStar": return "2 Stars";
+            case "ThreeStar": return "3 Stars";
+            case "FourStar": return "4 Stars";
+            case "FiveStar": return "5 Stars";
+            default: return rewardType;
+        }
     }
 }

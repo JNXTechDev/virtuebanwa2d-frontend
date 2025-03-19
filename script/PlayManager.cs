@@ -29,8 +29,8 @@ public class PlayManager : MonoBehaviour
     private string defaultStudentScene = "nene mainview";
 
     [SerializeField, Tooltip("The default scene to load for teacher users")]
-    private string defaultTeacherScene = "Teacher.Main.View 1";
-
+    private string defaultTeacherScene = "Teacher";
+    private string defaultAdminScene = "Admin";
     private bool isInitialized = false;
 
     private void Awake()
@@ -56,7 +56,8 @@ public class PlayManager : MonoBehaviour
         if (usernameText == null) Debug.LogError("Username Text is not assigned!");
         if (playButton == null) Debug.LogError("Play Button is not assigned!");
         if (string.IsNullOrEmpty(defaultStudentScene)) Debug.LogError("Default Student Scene is not set!");
-        if (string.IsNullOrEmpty(defaultTeacherScene)) Debug.LogError("Default Teacher Scene is not set!");
+        if (string.IsNullOrEmpty(defaultAdminScene)) Debug.LogError("Default Admin Scene is not set!");
+
     }
 
     private Task InitializeMongoDB()
@@ -147,6 +148,10 @@ public class PlayManager : MonoBehaviour
             if (role.Equals("Teacher", StringComparison.OrdinalIgnoreCase))
             {
                 SceneManager.LoadScene(defaultTeacherScene);
+            }
+            else if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                SceneManager.LoadScene(defaultAdminScene);
             }
             else if (role.Equals("Student", StringComparison.OrdinalIgnoreCase))
             {

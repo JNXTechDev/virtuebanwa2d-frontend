@@ -65,6 +65,7 @@ public class AudioManager : MonoBehaviour
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         string sceneName = scene.name.ToLower();
+        string scenePath = scene.path.ToLower();
         
         // Menu music scenes
         if (sceneName == "intro" || 
@@ -79,13 +80,14 @@ public class AudioManager : MonoBehaviour
         {
             ChangeMusic(playSceneMusic);
         }
-        // Gameplay music (nene mainview)
-        else if (sceneName == "nene mainview")
+        // Gameplay music (outside and other student scenes)
+        else if (scenePath.Contains("scenes/student/") || sceneName == "outside")
         {
             ChangeMusic(gameplayMusic);
+            Debug.Log($"Playing gameplay music for student scene: {sceneName}");
         }
 
-        Debug.Log($"Changed music for scene: {sceneName}");
+        Debug.Log($"Scene loaded: {sceneName}, Path: {scenePath}");
     }
 
     private void ChangeMusic(AudioClip newMusic)

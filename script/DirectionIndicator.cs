@@ -1,11 +1,11 @@
 using UnityEngine;
-using UnityEngine.UI; // Add this for UI components
+using UnityEngine.UI;
 
 public class DirectionIndicator : MonoBehaviour
 {
     public GameObject boyPlayer;
     public GameObject girlPlayer;
-    public Transform target;
+    public Transform[] targets; // Changed to array for multiple targets
     public float offset = 1f;
     public Sprite arrowSprite;
     public Button toggleButton;
@@ -14,8 +14,9 @@ public class DirectionIndicator : MonoBehaviour
 
     private SpriteRenderer spriteRenderer;
     private bool isVisible = true;
-    private bool hasContactedTarget = false;
+    private bool[] hasContactedTargets; // Array to track contact with each target
     private float alpha = 1f;
+    private int currentTargetIndex = 0; // Track current target
 
     void Start()
     {
@@ -35,37 +36,49 @@ public class DirectionIndicator : MonoBehaviour
         {
             Debug.LogWarning("Toggle button not assigned!");
         }
+
+        // Initialize contact tracking array
+        hasContactedTargets = new bool[targets.Length];
     }
 
     void Update()
     {
         Transform activePlayer = GetActivePlayer();
 
-        if (activePlayer == null || target == null)
+        if (activePlayer == null || targets == null || targets.Length == 0 || currentTargetIndex >= targets.Length)
         {
             spriteRenderer.enabled = false;
             return;
         }
 
-        float distanceToTarget = Vector2.Distance(activePlayer.position, target.position);
+        Transform currentTarget = targets[currentTargetIndex];
+        if (currentTarget == null)
+        {
+            spriteRenderer.enabled = false;
+            return;
+        }
+
+        float distanceToTarget = Vector2.Distance(activePlayer.position, currentTarget.position);
 
         if (distanceToTarget <= contactDistance)
         {
-            hasContactedTarget = true;
+            hasContactedTargets[currentTargetIndex] = true;
+            // Move to next target
+            currentTargetIndex++;
+            if (currentTargetIndex >= targets.Length)
+            {
+                spriteRenderer.enabled = false;
+                return;
+            }
         }
 
-        if (hasContactedTarget)
-        {
-            spriteRenderer.enabled = false;
-            return;
-        }
-
-        Vector2 direction = (target.position - activePlayer.position).normalized;
+        // Point to current target
+        Vector2 direction = (currentTarget.position - activePlayer.position).normalized;
         transform.position = (Vector2)activePlayer.position + direction * offset;
-
         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
         transform.rotation = Quaternion.Euler(0, 0, angle);
 
+        // Handle fade out when close to target
         if (distanceToTarget < disappearDistance)
         {
             alpha = Mathf.Clamp01((distanceToTarget - contactDistance) / (disappearDistance - contactDistance));
@@ -101,6 +114,27 @@ public class DirectionIndicator : MonoBehaviour
         {
             Debug.LogWarning("Invalid player selection. Please ensure only one player is active.");
             return null;
+        }
+    }
+
+    // Method to set targets programmatically
+    public void SetTargets(Transform[] newTargets)
+    {
+        targets = newTargets;
+        hasContactedTargets = new bool[targets.Length];
+        currentTargetIndex = 0;
+        isVisible = true;
+       // spriteRenderer.enabled = true;
+    }
+
+    // Method to manually advance to next target
+    public void AdvanceToNextTarget()
+    {
+        if (currentTargetIndex < targets.Length - 1)
+        {
+            currentTargetIndex++;
+            isVisible = true;
+            spriteRenderer.enabled = true;
         }
     }
 }

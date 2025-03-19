@@ -11,8 +11,10 @@ public class TeacherViewManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI teacherNameText;
     [SerializeField] private TextMeshProUGUI roleText;
 
-    // private const string baseUrl = "http://192.168.1.11:5000"; // Corrected base URL
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+            private const string baseUrl = "http://192.168.43.149:5000/api"; // Updated URL
+
+   //  private const string baseUrl = "http://192.168.1.11:5000"; // Corrected base URL
+   // private const string baseUrl = "https://vbdb.onrender.com/api";
 
     void Start()
     {

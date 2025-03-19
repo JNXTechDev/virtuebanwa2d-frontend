@@ -25,8 +25,7 @@ public class CreateAccountHandler : MonoBehaviour
     public TMP_Text noticeMessageText;
 
     // Base URL for the API
-    //  private const string baseUrl = "http://192.168.1.11:5000/api"; // Updated URL
-    private const string baseUrl = "https://vbdb.onrender.com/api";
+    private string baseUrl => NetworkConfig.BaseUrl; // Already using NetworkConfig, good!
 
     public void OnCreateAccountButtonClicked()
     {
@@ -77,11 +76,12 @@ public class CreateAccountHandler : MonoBehaviour
         {
             try
             {
-                var userData = new TeacherData
+                // Make sure we include the employeeID field in the request
+                var userData = new TeacherRegistrationData
                 {
                     FirstName = firstName,
                     LastName = lastName,
-                    EmployeeID = employeeID,
+                    EmployeeID = employeeID,  // This ensures EmployeeID is included
                     Username = username,
                     Password = password,
                     Role = "Teacher",
@@ -179,8 +179,9 @@ public class CreateAccountHandler : MonoBehaviour
     }
 }
 
+// Create a specific class for teacher registration requests
 [Serializable]
-public class TeacherData
+public class TeacherRegistrationData
 {
     public string FirstName;
     public string LastName;
@@ -189,5 +190,5 @@ public class TeacherData
     public string Password;
     public string Role;
     public string AdminApproval;
-    public string Character;  // Add this field
+    public string Character;
 }

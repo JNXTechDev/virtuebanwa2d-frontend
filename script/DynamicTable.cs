@@ -86,8 +86,8 @@ public class DynamicTable : MonoBehaviour
     private string selectedStudentFullName; // To store the full name of the selected student
 
     // Update the base URL to match other files
-  //  private const string baseUrl = "https://vbdb.onrender.com/api";
- private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
+    private string baseUrl => NetworkConfig.BaseUrl;
+
 
 
 
@@ -159,9 +159,9 @@ public class DynamicTable : MonoBehaviour
 
         Debug.Log($"[SendReward] JSON Payload: {jsonData}"); // ✅ Log the actual JSON
 
-      //  using (UnityWebRequest request = new UnityWebRequest("https://vbdb.onrender.com/api/users/rewards", "POST"))
 
-        using (UnityWebRequest request = new UnityWebRequest("http://192.168.1.4:5000/api/users/rewards", "POST"))
+        using (UnityWebRequest request = new UnityWebRequest(NetworkConfig.BaseUrl + "/users/rewards", "POST"))
+
 
 
         {

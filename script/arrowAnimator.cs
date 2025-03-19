@@ -1,43 +1,40 @@
 using UnityEngine;
 using System.Collections;
 
-public class ArrowFloat : MonoBehaviour
+public class ArrowAnimator : MonoBehaviour
 {
     public RectTransform arrow; // Assign your arrow RectTransform here
     public float moveDistance = 10f; // Distance to move up and down
-    public float moveSpeed = 1f; // Speed of the movement
+    public float moveSpeed = 20f; // Speed of the movement
 
-    private Vector2 originalPosition;
+    private Vector3 startPos;
+    private float timer;
 
     void Start()
     {
+        // If no arrow reference is set, use this object's RectTransform
         if (arrow == null)
         {
-            Debug.LogError("Arrow RectTransform is not assigned.");
-            return;
+            arrow = GetComponent<RectTransform>();
         }
 
-        originalPosition = arrow.anchoredPosition;
-        StartCoroutine(FloatArrow());
+        // Store initial position
+        startPos = arrow.anchoredPosition3D;
+        timer = 0f;
     }
 
-    private IEnumerator FloatArrow()
+    void Update()
     {
-        while (true)
+        if (arrow != null)
         {
-            // Move up
-            yield return MoveToPosition(originalPosition + Vector2.up * moveDistance);
-            // Move down
-            yield return MoveToPosition(originalPosition - Vector2.up * moveDistance);
-        }
-    }
+            // Update timer
+            timer += Time.deltaTime * moveSpeed;
 
-    private IEnumerator MoveToPosition(Vector2 targetPosition)
-    {
-        while ((arrow.anchoredPosition - targetPosition).sqrMagnitude > 0.01f)
-        {
-            arrow.anchoredPosition = Vector2.MoveTowards(arrow.anchoredPosition, targetPosition, moveSpeed * Time.deltaTime);
-            yield return null;
+            // Calculate offset using a sine wave
+            float offset = Mathf.Sin(timer) * moveDistance;
+
+            // Apply offset to create floating effect
+            arrow.anchoredPosition3D = startPos + new Vector3(offset, 0, 0);
         }
     }
 }

@@ -25,13 +25,8 @@ public class Login : MonoBehaviour
     public GameObject NoticeMessageBorder;
     public TMP_Text NoticeMessageText;
 
-    // Base URL for the API
-   // private const string baseUrl = "https://vbdb.onrender.com/api";
-  
-
- private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
-
-
+    // Remove hardcoded URLs and use NetworkConfig instead
+    private string baseUrl => NetworkConfig.BaseUrl;
     void Start()
     {
         // Hide NoticeMessageBorder initially
@@ -44,7 +39,7 @@ public class Login : MonoBehaviour
         if (string.IsNullOrEmpty(PlayerPrefs.GetString("MONGO_URI", "")))
         {
             Debug.LogError("MongoDB not initialized! Make sure MongoDBConfig is in the scene.");
-            feedbackText.text = "Database configuration error. Please restart the application.";
+          //  feedbackText.text = "Database configuration error. Please restart the application.";
             return;
         }
 
@@ -120,19 +115,25 @@ public class Login : MonoBehaviour
 
     private async Task LoginUser(string username, string password)
     {
-        using (HttpClient client = new HttpClient())
+        try
         {
-            try
+            using (var client = new HttpClient())
             {
-                // Prepare the login data
-                var loginData = new LoginRequestData { Username = username, Password = password };
+                // Add timeout
+                client.Timeout = TimeSpan.FromSeconds(30);
+                
+                var loginData = new LoginRequestData { 
+                    Username = username, 
+                    Password = password 
+                };
+                
                 string json = JsonUtility.ToJson(loginData);
+                Debug.Log($"Sending login request to {NetworkConfig.BaseUrl}/login");
+                Debug.Log($"Request body: {json}");
+
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                Debug.Log($"Sending login request with JSON: {json}");
-
-                // Send the login request
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/login", content);
+                var response = await client.PostAsync($"{NetworkConfig.BaseUrl}/login", content);
+                
                 string responseContent = await response.Content.ReadAsStringAsync();
                 Debug.Log($"Server response: {responseContent}");
 
@@ -212,12 +213,11 @@ public class Login : MonoBehaviour
                     Debug.LogError($"Login Failed: {response.ReasonPhrase}. Response: {responseContent}");
                 }
             }
-            catch (Exception ex)
-            {
-                feedbackText.text = "Error connecting to the server.";
-                Debug.LogError($"Error during login: {ex.Message}");
-                Debug.Log($"Feedback Text: {feedbackText.text}");
-            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Login error: {ex.GetType().Name} - {ex.Message}");
+            feedbackText.text = "Error connecting to server. Please check your internet connection.";
         }
     }
 

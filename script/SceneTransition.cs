@@ -1,51 +1,51 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
 using UnityEngine.UI;
 using UnityEngine.Video;
+using System.Collections;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System;
+using System.Globalization;
+using System.Collections.Generic;  // Add this line to fix Dictionary errors
+using Newtonsoft.Json;  // Add this using statement
 
 public class SceneTransition : MonoBehaviour
 {
-    [System.Serializable]
-    public class LessonInfo
-    {
-        public string unit = "Tutorial"; // Change default unit name
-        public string lesson = "Introduction"; // Change default lesson name
-        public string rewardName = "Star Badge"; // Add this line
-        public string rewardMessage = "You've mastered the basics!"; // Add this line
-    }
-
+    [Header("Scene Configuration")]
     public GameObject usernameObject;      // GameObject containing the dynamic username
     public string sceneName;               // The name of the current scene
-    public string checkpoint;              // The checkpoint or progress indicator in the scene
     public string sceneToLoad;             // The next scene to load after transition
+    
+    [Header("UI Elements")]
     public TMP_Text progressText;          // TextMeshPro UI text for showing progress messages
-    [SerializeField] private LessonInfo currentLessonInfo = new LessonInfo();
-
-    private bool isSaving = false;         // Ensures saving happens only once per trigger
-
-    // New variables for transition effects
-    public Image blackScreen;
-    public GameObject loadingIdleObject; // Change this to GameObject
-    public VideoPlayer loadingIdleVideo; // Add this for video playback
+    public Image blackScreen;              // Fade transition imagea
+    public GameObject loadingIdleObject;   // Loading animation object
+    public VideoPlayer loadingIdleVideo;   // Loading animation video player
 
     [Range(0f, 1f)]
-    public float initialBlackScreenAlpha = 0f; // Add this line
+    public float initialBlackScreenAlpha = 0f;
 
-   // private const string baseUrl = "https://vbdb.onrender.com/api";
-
-
- private const string baseUrl = "http://192.168.1.4:5000/api"; // Updated URL
-
-    // Constants for UI messages
-    private const string SavingProgressMessage = "Saving progress...";
-    private const string ProgressSavedMessage = "Progress saved!";
+    private bool isSaving = false;
     private const string UnknownUsername = "Unknown";
+   // private const string baseUrl = "http://192.168.1.11:5000/api";
+
+    private string chosenReward; // Add this field
+    private string chosenResponse; // Add this field
+    private string currentUnit; // Add this field
+    private string currentLesson; // Add this field
+    private int chosenScore; // Add this field for storing the reward score
+
+    public Animator animator;
+    public float transitionTime = 1f;
+    
+    private static readonly string TRIGGER_START = "Start";
+
+ // Base URL for the API
+    private string baseUrl => NetworkConfig.BaseUrl; 
+
 
     // Start function to initialize
     void Start()
@@ -65,6 +65,12 @@ public class SceneTransition : MonoBehaviour
         {
             SetBlackScreenAlpha(initialBlackScreenAlpha);
         }
+
+        // If animator is not assigned, try to get it
+        if (animator == null)
+        {
+            animator = GetComponent<Animator>();
+        }
     }
 
     private void SetBlackScreenAlpha(float alpha)
@@ -80,9 +86,77 @@ public class SceneTransition : MonoBehaviour
         }
     }
 
-    // New public method to start the transition
+    // New public method to start the transition without specific scene name
     public void StartTransition()
     {
+        if (!isSaving)
+        {
+            isSaving = true;
+            StartCoroutine(SaveProgressAndTransition());
+        }
+    }
+
+    // Main StartTransition method that handles scene transitions
+    public void StartTransition(string nextSceneName)
+    {
+        sceneToLoad = nextSceneName; // Store the scene name
+        Debug.Log($"Starting transition to scene: {sceneToLoad}");
+        
+        if (!isSaving)
+        {
+            isSaving = true;
+            
+            // If we have an animator, play transition animation
+            if (animator != null)
+            {
+                StartCoroutine(LoadSceneWithAnimation());
+            }
+            else
+            {
+                // No animation, start the transition directly
+                StartCoroutine(SaveProgressAndTransition());
+            }
+        }
+    }
+
+    // Add this new method
+    public void StartTransitionWithReward(string nextSceneName, string reward, string response)
+    {
+        sceneToLoad = nextSceneName;
+        chosenReward = reward;
+        chosenResponse = response;
+        if (!isSaving)
+        {
+            isSaving = true;
+            StartCoroutine(SaveProgressAndTransition());
+        }
+    }
+
+    public void StartTransitionWithReward(string nextSceneName, string reward, string response, string unit, string lesson)
+    {
+        sceneToLoad = nextSceneName;
+        chosenReward = reward;
+        chosenResponse = response;
+        currentUnit = unit;
+        currentLesson = lesson;
+        
+        if (!isSaving)
+        {
+            isSaving = true;
+            StartCoroutine(SaveProgressAndTransition());
+        }
+    }
+
+    // Update StartTransitionWithReward to include score
+    public void StartTransitionWithReward(string nextSceneName, string reward, string response, string unit, string lesson, int score = 30)
+    {
+        sceneToLoad = nextSceneName;
+        chosenReward = reward;
+        chosenResponse = response;
+        currentUnit = unit;
+        currentLesson = lesson;
+        chosenScore = score; // Store the score
+        
         if (!isSaving)
         {
             isSaving = true;
@@ -113,19 +187,19 @@ public class SceneTransition : MonoBehaviour
 
         if (progressText != null)
         {
-            progressText.text = SavingProgressMessage;
+            progressText.text = "Saving progress...";
             progressText.gameObject.SetActive(true);
         }
 
         string currentUsername = GetCurrentUsername();
 
-        yield return SaveProgressToMongoDB(currentUsername, currentLessonInfo.unit, currentLessonInfo.lesson);
+        yield return SaveProgressToMongoDB(currentUsername);
 
         yield return new WaitForSeconds(2f);
 
         if (progressText != null)
         {
-            progressText.text = ProgressSavedMessage;
+            progressText.text = "Progress saved!";
         }
 
         yield return new WaitForSeconds(1.5f);
@@ -159,50 +233,127 @@ public class SceneTransition : MonoBehaviour
         yield return StartCoroutine(FadeOut(blackScreen));
     }
 
-    private async Task SaveProgressToMongoDB(string username, string unit, string lesson)
+    private async Task SaveProgressToMongoDB(string username)
     {
-        Debug.Log($"Saving progress for username: {username}, unit: {unit}, lesson: {lesson}");
+        try {
+            var isTutorial = currentLesson?.ToLower() == "tutorial";
+            Debug.Log($"Saving progress for: {(isTutorial ? "Tutorial" : $"{currentUnit} {currentLesson}")}");
 
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(unit) || string.IsNullOrEmpty(lesson))
-        {
-            Debug.LogError("Invalid data. Username, unit, and lesson are required.");
-            return;
-        }
+            // Initialize these variables at the top for wider scope
+            string unitKey = currentUnit?.Replace("UNIT ", "Unit").Replace(" ", "");
+            string lessonKey = currentLesson?.Replace("Lesson ", "Lesson").Replace(" ", "");
+            
+            var data = new Dictionary<string, object> {
+                ["Username"] = username,
+                ["currentUnit"] = unitKey,
+                ["currentLesson"] = lessonKey
+            };
 
-        var progressData = new GameProgressData
-        {
-            Username = username, // Changed to match the property name in GameProgressData
-            unit = unit,
-            lesson = lesson,
-            reward = currentLessonInfo.rewardName,
-            message = currentLessonInfo.rewardMessage
-        };
-
-        using (HttpClient client = new HttpClient())
-        {
-            try
+            if (isTutorial)
             {
-                string json = JsonUtility.ToJson(progressData);
-                Debug.Log($"Sending JSON: {json}");
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PostAsync($"{baseUrl}/game_progress", content);
-                string responseContent = await response.Content.ReadAsStringAsync();
+                // Check if all 4 NPCs are completed before setting status to Completed
+                bool allNPCsCompleted = await CheckAllNPCsCompleted(username);
+                string tutorialStatus = allNPCsCompleted ? "Completed" : "In Progress";
                 
+                data["tutorial"] = new Dictionary<string, object> {
+                    ["status"] = tutorialStatus,
+                    ["reward"] = chosenReward,
+                    ["date"] = DateTime.Now.ToString("o")
+                };
+                
+                Debug.Log($"Setting tutorial status to: {tutorialStatus} based on NPC completion");
+            }
+            else 
+            {
+                // For lesson progress, don't include npcsTalkedTo from other contexts
+                data["units"] = new Dictionary<string, object> {
+                    [unitKey] = new Dictionary<string, object> {
+                        ["status"] = "In Progress",
+                        ["completedLessons"] = 1,
+                        ["lessons"] = new Dictionary<string, object> {
+                            [lessonKey] = new Dictionary<string, object> {
+                                ["status"] = "Completed", 
+                                ["reward"] = chosenReward,  // Make sure reward is passed
+                                ["score"] = chosenScore,    // Make sure score is passed
+                                ["lastAttempt"] = DateTime.Now.ToString("o")
+                            }
+                        }
+                    }
+                };
+
+                Debug.Log($"Sending progress update - Lesson: {lessonKey}, Reward: {chosenReward}, Score: {chosenScore}");
+            }
+
+            using (var client = new HttpClient())
+            {
+                var content = new StringContent(
+                    JsonConvert.SerializeObject(data), 
+                    Encoding.UTF8, 
+                    "application/json"
+                );
+
+                Debug.Log($"Sending data to server: {await content.ReadAsStringAsync()}");
+
+                var response = await client.PostAsync($"{baseUrl}/game_progress", content);
+                var responseText = await response.Content.ReadAsStringAsync();
+                Debug.Log($"Server response: {responseText}");
+
                 if (!response.IsSuccessStatusCode)
                 {
-                    Debug.LogError($"Failed to save progress: {response.ReasonPhrase}. Response content: {responseContent}");
+                    throw new Exception($"Server returned {response.StatusCode}: {responseText}");
                 }
-                else
-                {
-                    Debug.Log($"Progress saved successfully. Response: {responseContent}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error saving progress: {ex.Message}");
+
+                // Verify the saved data
+                var verifyResponse = await client.GetAsync($"{baseUrl}/game_progress/{username}");
+                var verifyData = await verifyResponse.Content.ReadAsStringAsync();
+                Debug.Log($"Progress data loaded: {verifyData}");
             }
         }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Failed to save progress: {ex.Message}");
+        }
+    }
+
+    // Add this helper method to check if all NPCs are completed
+    private async Task<bool> CheckAllNPCsCompleted(string username)
+    {
+        try
+        {
+            string[] requiredNPCs = { "Janica", "Mark", "Annie", "Rojan" };
+            
+            // Check each NPC's completion status
+            foreach (string npc in requiredNPCs)
+            {
+                bool isCompleted = await VirtueBanwa.Dialogue.DialogueState.IsDialogueCompleted(username, npc);
+                if (!isCompleted)
+                {
+                    return false; // If any NPC is not completed, return false
+                }
+            }
+            
+            // If we get here, all NPCs are completed
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error checking NPC completion: {ex.Message}");
+            return false; // Return false on error
+        }
+    }
+
+    private string GetPhilippineDateTime()
+    {
+        // Convert to Philippine Time (UTC+8)
+        TimeZoneInfo philippineZone = TimeZoneInfo.CreateCustomTimeZone(
+            "Philippine Time",
+            new TimeSpan(8, 0, 0),
+            "Philippine Time",
+            "Philippine Time"
+        );
+
+        DateTime philippineTime = TimeZoneInfo.ConvertTime(DateTime.Now, philippineZone);
+        return philippineTime.ToString("yyyy-MM-dd hh:mm:ss tt", CultureInfo.InvariantCulture);
     }
 
     // New method for fading in an image
@@ -238,13 +389,74 @@ public class SceneTransition : MonoBehaviour
         return Username;
     }
 
-    public void SetCurrentUnit(string unit)
+    public void LoadSceneImmediately(string sceneName)
     {
-        currentLessonInfo.unit = unit;
+        StartCoroutine(LoadSceneSequence(sceneName));
     }
 
-    public void SetCurrentLesson(string lesson)
+    private IEnumerator LoadSceneSequence(string sceneName)
     {
-        currentLessonInfo.lesson = lesson;
+        // Get and disable the main camera
+        if (Camera.main != null)
+        {
+            Camera.main.gameObject.SetActive(false);
+        }
+
+        // Hide all canvases except loading animation
+        var canvases = FindObjectsOfType<Canvas>();
+        foreach (var canvas in canvases)
+        {
+            if (loadingIdleObject != null && !loadingIdleObject.transform.IsChildOf(canvas.transform))
+            {
+                canvas.gameObject.SetActive(false);
+            }
+        }
+        
+        // Show loading animation
+        if (loadingIdleObject != null)
+        {
+            loadingIdleObject.SetActive(true);
+            
+            if (loadingIdleVideo != null)
+            {
+                loadingIdleVideo.Play();
+                yield return null;
+            }
+        }
+
+        // Load next scene immediately
+        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+    }
+    
+    private System.Collections.IEnumerator LoadSceneWithAnimation()
+    {
+        // Trigger the animation
+        animator.SetTrigger(TRIGGER_START);
+        
+        // Wait for animation
+        yield return new WaitForSeconds(transitionTime);
+        
+        // Load the scene
+        StartCoroutine(SaveProgressAndTransition());
+    }
+    
+    private void LoadSceneDirectly()
+    {
+        if (string.IsNullOrEmpty(sceneToLoad))
+        {
+            Debug.LogError("No scene specified to load!");
+            return;
+        }
+        
+        Debug.Log($"Loading scene directly: {sceneToLoad}");
+        
+        try 
+        {
+            SceneManager.LoadScene(sceneToLoad);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"Error loading scene '{sceneToLoad}': {ex.Message}");
+        }
     }
 }
