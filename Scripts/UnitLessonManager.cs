@@ -15,38 +15,50 @@ using VirtueBanwa.Dialogue;
 
 public class UnitLessonManager : MonoBehaviour
 {
+    // Enum for predefined unit names
+    public enum UnitName
+    {
+        Tutorial,      // For the tutorial unit
+        Unit1,
+        Unit2,
+        VirtueBanwa    // For the free roam unit
+    }
+
+    // Enum for predefined lesson names
+    public enum LessonName
+    {
+        Tutorial,      // For the tutorial lesson
+        PreTest,
+        Lesson1,
+        Lesson2,
+        Lesson3,
+        Lesson4,
+        Lesson5,
+        Lesson6,
+        PostTest,
+        Explore        // For the free roam lesson
+    }
+
     [System.Serializable]
     public class LessonData
     {
-        public string lessonName;
+        public LessonName lessonName; // Use enum for lesson names
         public string defaultScene;
         public bool isUnlocked;
         public string lastCheckpoint;
     }
 
-    // Keep enum for internal status tracking
-    private enum LessonStatus
-    {
-        Locked,
-        Available,
-        InProgress,
-        Completed
-    }
-
     [System.Serializable]
     public class UnitData
     {
-        public string unitName;
+        public UnitName unitName; // Use enum for unit names
         public List<LessonData> lessons = new List<LessonData>();
         public bool isUnlocked;
     }
 
     [Header("UI References")]
-    [SerializeField] private ScrollRect unitScrollView;              
     [SerializeField] private ScrollRect lessonScrollView;           
-    [SerializeField] private Transform unitButtonContainer;         
     [SerializeField] private Transform lessonButtonContainer;       
-    [SerializeField] private GameObject unitButtonPrefab;
     [SerializeField] private GameObject lessonButtonPrefab;
     [SerializeField] private GameObject lessonSelectionPanel;      // Add this field
     [SerializeField] private TextMeshProUGUI usernameText;
@@ -72,17 +84,28 @@ public class UnitLessonManager : MonoBehaviour
     private bool isExploreMode = false;
 
     // Add progressData field
-    private GameProgress progressData;
+    private GameProgress progressData; // Keep this if needed for UI updates, but no longer fetch it independently
+
+    private Dictionary<string, string> displayNameMap = new Dictionary<string, string>
+    {
+        { "Unit1", "Unit 1" },
+        { "PreTest", "Pre Test" },
+        { "Lesson1", "Lesson 1" },
+        { "Lesson2", "Lesson 2" }
+    };
+
+    public string GetDisplayName(string backendName)
+    {
+        if (displayNameMap.TryGetValue(backendName, out string displayName))
+        {
+            return displayName;
+        }
+        return backendName; // Fallback to the original name if no mapping exists
+    }
 
     private void Awake()
     {
         // Validate and fix container references
-        if (unitScrollView != null && unitButtonContainer == null)
-        {
-            unitButtonContainer = unitScrollView.content;
-            Debug.Log("Unit button container auto-assigned to ScrollView content");
-        }
-
         if (lessonScrollView != null && lessonButtonContainer == null)
         {
             lessonButtonContainer = lessonScrollView.content;
@@ -90,10 +113,6 @@ public class UnitLessonManager : MonoBehaviour
         }
 
         // Validate references
-        if (unitButtonContainer == null)
-        {
-            Debug.LogError("Unit button container (Content) reference is missing!");
-        }
         if (lessonButtonContainer == null)
         {
             Debug.LogError("Lesson button container (Content) reference is missing!");
@@ -152,10 +171,11 @@ public class UnitLessonManager : MonoBehaviour
                 Debug.LogError("Username Text reference is missing!");
             }
 
-            // Change this from direct call to fire and forget using _
-            _ = LoadUserProgress();
-            SetupUnitButtons();
-            lessonSelectionPanel.SetActive(false);
+            // Remove the call to LoadUserProgress
+            // _ = LoadUserProgress();
+
+            SetupLessonButtons();
+            lessonSelectionPanel.SetActive(true);
         }
         catch (Exception ex)
         {
@@ -163,33 +183,68 @@ public class UnitLessonManager : MonoBehaviour
         }
     }
 
-    private void SetupUnitButtons()
+    //here
+private void SetupLessonButtons()
+{
+    if (lessonButtonContainer == null)
     {
-        if (unitButtonContainer == null)
-        {
-            Debug.LogError("Unit button container is null!");
-            return;
-        }
-
-        // Clear existing buttons
-        foreach (Transform child in unitButtonContainer)
-        {
-            Destroy(child.gameObject);
-        }
-
-        foreach (UnitData unit in units)
-        {
-            GameObject buttonObj = Instantiate(unitButtonPrefab, unitButtonContainer);
-            Button button = buttonObj.GetComponent<Button>();
-            TextMeshProUGUI buttonText = buttonObj.GetComponentInChildren<TextMeshProUGUI>();
-
-            buttonText.text = unit.unitName;
-            button.onClick.AddListener(() => ShowLessonsForUnit(unit));
-
-            button.interactable = unit.isUnlocked;
-        }
+        Debug.LogError("Lesson button container is null!");
+        return;
     }
 
+    // Clear existing buttons
+    foreach (Transform child in lessonButtonContainer)
+    {
+        Destroy(child.gameObject);
+    }
+
+    // Add the Tutorial button separately
+    GameObject tutorialButtonObj = Instantiate(lessonButtonPrefab, lessonButtonContainer);
+    Button tutorialButton = tutorialButtonObj.GetComponent<Button>();
+
+    // Set the tutorial button text
+    TextMeshProUGUI tutorialButtonText = tutorialButtonObj.transform.Find("LessonText")?.GetComponent<TextMeshProUGUI>();
+    if (tutorialButtonText != null)
+    {
+        tutorialButtonText.text = "Tutorial - Tutorial"; // Unique identifier for the tutorial
+    }
+    else
+    {
+        Debug.LogError("LessonText component not found on tutorial button prefab.");
+    }
+
+    // Add click handler for the tutorial button
+    tutorialButton.onClick.AddListener(async () => await LoadLesson("Tutorial", new LessonData
+    {
+        lessonName = LessonName.Tutorial,
+        defaultScene = "Tutorial Outside" // Replace with your tutorial scene name
+    }));
+
+    // Add buttons for other units and lessons
+    foreach (UnitData unit in units)
+    {
+        foreach (LessonData lesson in unit.lessons)
+        {
+            GameObject buttonObj = Instantiate(lessonButtonPrefab, lessonButtonContainer);
+            Button button = buttonObj.GetComponent<Button>();
+
+            // Set lesson name text with unit name as a prefix
+            TextMeshProUGUI buttonText = buttonObj.transform.Find("LessonText")?.GetComponent<TextMeshProUGUI>();
+            if (buttonText != null)
+            {
+                buttonText.text = $"{unit.unitName} - {lesson.lessonName}"; // Combine unit and lesson name
+            }
+            else
+            {
+                Debug.LogError("LessonText component not found on lesson button prefab.");
+            }
+
+            // Add click handler for other statuses to load the lesson
+            button.onClick.AddListener(async () => await LoadLesson(unit.unitName.ToString(), lesson));
+        }
+    }
+}
+//end
     private async Task LoadLesson(string unitName, LessonData lesson)
     {
         Debug.Log($"[LoadLesson] Starting for {unitName} - {lesson.lessonName}");
@@ -199,7 +254,7 @@ public class UnitLessonManager : MonoBehaviour
         pendingUnitName = unitName;
 
         // Special case for Explore mode - skip completion check and just load
-        bool isExploreMode = (lesson.lessonName == "Virtue Banwa" || lesson.lessonName.Contains("Explore"));
+        bool isExploreMode = (lesson.lessonName == LessonName.Lesson1 || lesson.lessonName.ToString().Contains("Explore"));
         if (isExploreMode)
         {
             StartLesson();
@@ -241,187 +296,6 @@ public class UnitLessonManager : MonoBehaviour
         return janicaCompleted && markCompleted && annieCompleted && rojanCompleted;
     }
 
-    private void ShowLessonsForUnit(UnitData unit)
-    {
-        if (lessonButtonContainer == null)
-        {
-            Debug.LogError("Lesson button container is null!");
-            return;
-        }
-
-        // Clear existing buttons
-        foreach (Transform child in lessonButtonContainer)
-        {
-            Destroy(child.gameObject);
-        }
-
-        foreach (LessonData lesson in unit.lessons)
-        {
-            GameObject buttonObj = Instantiate(lessonButtonPrefab, lessonButtonContainer);
-            Button button = buttonObj.GetComponent<Button>();
-
-            // Set lesson name text
-            TextMeshProUGUI buttonText = buttonObj.transform.Find("LessonText")?.GetComponent<TextMeshProUGUI>();
-            if (buttonText != null)
-            {
-                buttonText.text = lesson.lessonName;
-            }
-            else
-            {
-                Debug.LogError("LessonText component not found on lesson button prefab.");
-            }
-
-            // Find the status indicator and status text
-            Transform statusIndicator = buttonObj.transform.Find("StatusIndicator");
-            TextMeshProUGUI statusText = null;
-
-            if (statusIndicator != null)
-            {
-                statusText = statusIndicator.Find("StatusText")?.GetComponent<TextMeshProUGUI>();
-            }
-
-            // Special case for Virtue Banwa
-            bool isVirtueBanwa = lesson.lessonName == "Virtue Banwa" || lesson.lessonName.Contains("Explore");
-            if (isVirtueBanwa)
-            {
-                button.interactable = true;
-                if (statusIndicator != null)
-                {
-                    statusIndicator.gameObject.SetActive(false);
-                }
-            }
-            else
-            {
-                // Regular lessons - Determine status and update visuals
-                LessonStatus status = GetLessonStatusFromDatabase(unit.unitName, lesson);
-                button.interactable = status != LessonStatus.Locked;
-                UpdateButtonVisuals(button, status, statusText);
-            }
-
-            // Add click handler
-            button.onClick.AddListener(async () => await LoadLesson(unit.unitName, lesson));
-        }
-
-        lessonSelectionPanel.SetActive(true);
-    }
-
-    private void UpdateButtonVisuals(Button button, LessonStatus status, TextMeshProUGUI statusText)
-    {
-        // Don't show status for Virtue Banwa or Explore buttons
-        TMP_Text buttonTextComponent = button.GetComponentInChildren<TextMeshProUGUI>();
-        string buttonTextString = buttonTextComponent != null ? buttonTextComponent.text : "";
-        
-        if (buttonTextString == "Virtue Banwa" || buttonTextString.Contains("Explore"))
-        {
-            if (statusText != null)
-            {
-                statusText.gameObject.SetActive(false);
-            }
-            // Always make these buttons interactable
-            button.interactable = true;
-            return;
-        }
-
-        // Update button colors based on status
-        ColorBlock colors = button.colors;
-        switch (status)
-        {
-            case LessonStatus.Locked:
-             //   colors.normalColor = new Color(0.5f, 0.5f, 0.5f); // Gray for locked
-                break;
-            case LessonStatus.Completed:
-             //   colors.normalColor = new Color(0.8f, 1.0f, 0.8f); // Light green for completed
-                break;
-            case LessonStatus.InProgress:
-             //   colors.normalColor = new Color(1.0f, 1.0f, 0.8f); // Light yellow for in progress
-                break;
-            default:
-                //colors.normalColor = Color.black; // White for available
-                break;
-        }
-        button.colors = colors;
-        
-        // Update status text if available
-        if (statusText != null)
-        {
-            // Set the text based on status
-            switch (status)
-            {
-                case LessonStatus.Locked:
-                    statusText.text = "LOCKED";
-                    //statusText.color = Color.gray;
-                    break;
-                case LessonStatus.Available:
-                    statusText.text = "AVAILABLE";
-                   // statusText.color = Color.white;
-                    break;
-                case LessonStatus.InProgress:
-                    statusText.text = "IN PROGRESS";
-                   // statusText.color = Color.yellow;
-                    break;
-                case LessonStatus.Completed:
-                    statusText.text = "COMPLETED";
-                 //   statusText.color = Color.green;
-                    break;
-            }
-            
-            // Force the text to be visible and update
-            statusText.enabled = true;
-            statusText.gameObject.SetActive(true);
-            
-            Debug.Log($"Updated StatusText to: {statusText.text}, Color: {statusText.color}");
-            
-            // Force the layout to update
-            LayoutRebuilder.ForceRebuildLayoutImmediate(statusText.rectTransform);
-        }
-        else
-        {
-            Debug.LogWarning("StatusText is null, cannot update status display");
-        }
-    }
-
-    private LessonStatus GetLessonStatusFromDatabase(string unitName, LessonData lesson)
-    {
-        if (lesson.lessonName == "Tutorial")
-        {
-            // Use the tutorial status from progressData
-            if (progressData?.tutorial?.status == "Completed")
-            {
-                return LessonStatus.Completed;
-            }
-            else if (progressData?.tutorial?.status == "In Progress")
-            {
-                return LessonStatus.InProgress;
-            }
-            else
-            {
-                return LessonStatus.Available;
-            }
-        }
-
-        if (progressData != null &&
-            progressData.units != null &&
-            progressData.units.TryGetValue(unitName, out var unitData) &&
-            unitData.lessons != null &&
-            unitData.lessons.TryGetValue(lesson.lessonName, out var lessonData))
-        {
-            switch (lessonData.status)
-            {
-                case "Completed":
-                    return LessonStatus.Completed;
-                case "InProgress":
-                    return LessonStatus.InProgress;
-                case "Available":
-                    return LessonStatus.Available;
-                case "Locked":
-                default:
-                    return LessonStatus.Locked;
-            }
-        }
-
-        return LessonStatus.Locked;
-    }
-
     private void ShowRetakePrompt(string unitName, string lessonName)
     {
         Debug.Log($"[ShowRetakePrompt] SHOWING RETAKE PANEL for {unitName} - {lessonName}");
@@ -433,7 +307,7 @@ public class UnitLessonManager : MonoBehaviour
             {
                 pendingLesson = new LessonData
                 {
-                    lessonName = "Tutorial",
+                    lessonName = LessonName.Lesson1,
                     defaultScene = "Tutorial Outside"
                 };
             }
@@ -525,12 +399,12 @@ public class UnitLessonManager : MonoBehaviour
         retakePanel.SetActive(false);
 
         // Special handling for tutorial retake - FIX THE CONDITION HERE
-        if (pendingUnitName == "UNIT 1" && (pendingLesson?.lessonName == "Tutorial" || pendingLesson?.lessonName == "Tutorial"))
+        if (pendingUnitName == "UNIT 1" && (pendingLesson?.lessonName == LessonName.Lesson1 || pendingLesson?.lessonName == LessonName.Lesson1))
         {
             Debug.Log("[OnRetakeYesClicked] Resetting tutorial progress before retaking...");
             StartCoroutine(ResetTutorialProgress());
         }
-        else if (pendingUnitName == "Tutorial" || (pendingLesson != null && pendingLesson.lessonName == "Tutorial"))
+        else if (pendingUnitName == "Tutorial" || (pendingLesson != null && pendingLesson.lessonName == LessonName.Lesson1))
         {
             // Additional case for when unitName is just "Tutorial"
             Debug.Log("[OnRetakeYesClicked] Resetting tutorial progress (alternative path)...");
@@ -548,7 +422,7 @@ public class UnitLessonManager : MonoBehaviour
                 
                 // Save to PlayerPrefs
                 PlayerPrefs.SetString("CurrentUnit", pendingUnitName);
-                PlayerPrefs.SetString("CurrentLesson", pendingLesson.lessonName);
+                PlayerPrefs.SetString("CurrentLesson", pendingLesson.lessonName.ToString());
                 PlayerPrefs.Save();
                 
                 // Directly load the scene
@@ -749,7 +623,7 @@ public class UnitLessonManager : MonoBehaviour
         if (pendingLesson == null) return;
         
         // NEW: Check if the lesson is completed before loading
-        if (pendingLesson.lessonName == "Tutorial")
+        if (pendingLesson.lessonName == LessonName.Lesson1)
         {
             // Check if tutorial is completed
             if (progressData?.tutorial?.status == "Completed")
@@ -764,7 +638,7 @@ public class UnitLessonManager : MonoBehaviour
         {
             // For regular lessons, check completion status
             string unitKey = pendingUnitName.Replace("UNIT ", "Unit").Replace(" ", "");
-            string lessonKey = pendingLesson.lessonName.Replace("Lesson ", "Lesson");
+            string lessonKey = pendingLesson.lessonName.ToString();
             
             if (progressData?.units != null && 
                 progressData.units.TryGetValue(unitKey, out var unitData) &&
@@ -774,7 +648,7 @@ public class UnitLessonManager : MonoBehaviour
             {
                 // Don't proceed with scene loading, show retake panel instead
                 Debug.Log($"[StartLesson] {pendingUnitName} - {pendingLesson.lessonName} is completed, showing retake prompt");
-                ShowRetakePrompt(pendingUnitName, pendingLesson.lessonName);
+                ShowRetakePrompt(pendingUnitName, pendingLesson.lessonName.ToString());
                 return;
             }
         }
@@ -785,11 +659,11 @@ public class UnitLessonManager : MonoBehaviour
 
         // Save current unit and lesson to PlayerPrefs
         PlayerPrefs.SetString("CurrentUnit", pendingUnitName);
-        PlayerPrefs.SetString("CurrentLesson", pendingLesson.lessonName);
+        PlayerPrefs.SetString("CurrentLesson", pendingLesson.lessonName.ToString());
         PlayerPrefs.Save();
 
         // Add await here
-        await SaveSceneTransitionProgress(currentUsername, pendingUnitName, pendingLesson.lessonName);
+        await SaveSceneTransitionProgress(currentUsername, pendingUnitName, pendingLesson.lessonName.ToString());
         
         // Now load the scene
         SceneManager.LoadScene(pendingLesson.defaultScene);
@@ -826,64 +700,6 @@ public class UnitLessonManager : MonoBehaviour
             Debug.LogError($"Error checking lesson completion: {ex.Message}");
         }
         return false;
-    }
-
-    private async Task LoadUserProgress()
-    {
-        loadingPanel.SetActive(true);
-        loadingText.text = "Loading progress...";
-
-        using (HttpClient client = new HttpClient())
-        {
-            try
-            {
-                HttpResponseMessage response = await client.GetAsync($"{baseUrl}/game_progress/{currentUsername}");
-                if (response.IsSuccessStatusCode)
-                {
-                    string responseContent = await response.Content.ReadAsStringAsync();
-                    Debug.Log($"Progress data loaded: {responseContent}");
-
-                    // Store the loaded data in our class property
-                    progressData = JsonUtility.FromJson<GameProgress>(responseContent);
-
-                    if (progressData != null)
-                    {
-                        Debug.Log($"Tutorial Status: {progressData.tutorial?.status}, Reward: {progressData.tutorial?.reward}, Date: {progressData.tutorial?.date}");
-
-                        // Check if units exists and has data
-                        if (progressData.units != null)
-                        {
-                            foreach (var unit in progressData.units)
-                            {
-                                if (unit.Value?.lessons != null)
-                                {
-                                    foreach (var lesson in unit.Value.lessons)
-                                    {
-                                        Debug.Log($"Unit: {unit.Key}, Lesson: {lesson.Key}, Status: {lesson.Value.status}, Reward: {lesson.Value.reward}");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Debug.Log("No progress data loaded.");
-                    }
-                }
-                else
-                {
-                    Debug.LogError($"Failed to load progress: {response.ReasonPhrase}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"Error loading progress: {ex.Message}");
-            }
-            finally
-            {
-                loadingPanel.SetActive(false);
-            }
-        }
     }
 
     private async Task SaveSceneTransitionProgress(string username, string unitName, string lessonName)
@@ -1022,7 +838,7 @@ public class UnitLessonManager : MonoBehaviour
                 TextMeshProUGUI buttonText = buttonObj.GetComponentInChildren<TextMeshProUGUI>();
                 if (buttonText != null)
                 {
-                    buttonText.text = lesson.lessonName;
+                    buttonText.text = lesson.lessonName.ToString(); // Use enum for lesson names
                 }
             }
         }
@@ -1037,31 +853,21 @@ public class UnitLessonManager : MonoBehaviour
         DialogueState.ResetDialogueState(username, "Rojan_Tutorial");
     }
 
-    private void RefreshUnitAndLessonManager()
+    public void RefreshUnitAndLessonManager()
     {
-        // Call the asynchronous method without awaiting it
-        _ = RefreshUnitAndLessonManagerAsync();
+        // Remove the call to RefreshUnitAndLessonManagerAsync
+        // _ = RefreshUnitAndLessonManagerAsync();
+        Debug.Log("RefreshUnitAndLessonManager is no longer needed.");
     }
 
+    // Remove the RefreshUnitAndLessonManagerAsync method
+    // Remove this method entirely
+    /*
     private async Task RefreshUnitAndLessonManagerAsync()
     {
-        Debug.Log("Refreshing Unit and Lesson Manager...");
-        loadingPanel.SetActive(true);
-        loadingText.text = "Refreshing progress...";
-
-        // Fetch the latest progress data
-        await LoadUserProgress();
-        
-        // Debug the tutorial status after refresh
-        DebugTutorialStatus();
-
-        // Rebuild the unit and lesson buttons
-        SetupUnitButtons();
-        lessonSelectionPanel.SetActive(false);
-
-        loadingPanel.SetActive(false);
-        Debug.Log("Unit and Lesson Manager refreshed.");
+        // This method is no longer needed since MainView.cs handles refreshing progress data
     }
+    */
 
     // Add a debug method to log the current status of the tutorial
     private void DebugTutorialStatus()
@@ -1084,26 +890,26 @@ public class UnitLessonManager : MonoBehaviour
             Debug.Log("No tutorial progress data available");
         }
     }
-private IEnumerator LoadProgressAfterResetCoroutine()
-{
-    using (UnityWebRequest request = UnityWebRequest.Get($"{baseUrl}/game_progress/{currentUsername}"))
+    private IEnumerator LoadProgressAfterResetCoroutine()
     {
-        yield return request.SendWebRequest();
-        
-        if (request.result == UnityWebRequest.Result.Success)
+        using (UnityWebRequest request = UnityWebRequest.Get($"{baseUrl}/game_progress/{currentUsername}"))
         {
-            string responseContent = request.downloadHandler.text;
-            Debug.Log($"Reloaded progress data after reset: {responseContent}");
+            yield return request.SendWebRequest();
+            
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                string responseContent = request.downloadHandler.text;
+                Debug.Log($"Reloaded progress data after reset: {responseContent}");
 
-            // Store the loaded data in our class property
-            progressData = JsonUtility.FromJson<GameProgress>(responseContent);
-        }
-        else
-        {
-            Debug.LogError($"Error reloading tutorial progress: {request.error}");
+                // Store the loaded data in our class property
+                progressData = JsonUtility.FromJson<GameProgress>(responseContent);
+            }
+            else
+            {
+                Debug.LogError($"Error reloading tutorial progress: {request.error}");
+            }
         }
     }
-}
     // Add this method to show the retake prompt forcefully for debugging
     public void ShowRetakePanel(string lessonType = "Tutorial")
     {
@@ -1127,7 +933,7 @@ private IEnumerator LoadProgressAfterResetCoroutine()
                 retakeYesButton.onClick.AddListener(() => {
                     retakePanel.SetActive(false);
                     pendingLesson = new LessonData { 
-                        lessonName = "Tutorial", 
+                        lessonName = LessonName.Lesson1, 
                         defaultScene = "Tutorial Outside" 
                     };
                     pendingUnitName = "UNIT 1";
@@ -1144,14 +950,104 @@ private IEnumerator LoadProgressAfterResetCoroutine()
             Debug.LogError("Retake panel is null - cannot show retake prompt");
         }
     }
-}
 
-// Only keep these classes if they're not defined elsewhere
-[System.Serializable]
-public class ProgressUpdateData
+
+//here
+public void UpdateLessonStatusIndicator(string unitName, string lessonName, string status)
 {
-    public string Username;
-    public string UnitName;
-    public string LessonName; // Add this field that was missing
-}
+    Debug.Log($"[UpdateLessonStatusIndicator] Unit: {unitName}, Lesson: {lessonName}, Status: {status}");
 
+    // Handle Tutorial - Tutorial separately
+    if (unitName == "Tutorial" && lessonName == "Tutorial")
+    {
+        // Find the tutorial button by its unique identifier
+        string tutorialIdentifier = "Tutorial - Tutorial";
+        foreach (Transform child in lessonButtonContainer)
+        {
+            TextMeshProUGUI buttonText = child.Find("LessonText")?.GetComponent<TextMeshProUGUI>();
+            if (buttonText != null && buttonText.text == tutorialIdentifier)
+            {
+                // Find the status indicator and update its text
+                Transform statusIndicator = child.Find("StatusIndicator");
+                TextMeshProUGUI statusText = statusIndicator?.Find("StatusText")?.GetComponent<TextMeshProUGUI>();
+                if (statusText != null)
+                {
+                    statusText.text = status.ToUpper();
+                    Debug.Log($"Updated status for Tutorial - Tutorial to {status.ToUpper()}");
+                }
+
+                // Disable the button if the status is Locked
+                Button button = child.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.interactable = status != "Locked";
+                    Debug.Log($"Button for Tutorial - Tutorial is now {(button.interactable ? "enabled" : "disabled")}");
+
+                    // Add click listener to handle "Completed" status
+                    button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() =>
+                    {
+                        if (status == "Completed")
+                        {
+                            ShowRetakePrompt("Tutorial", "Tutorial");
+                        }
+                        else
+                        {
+                            StartLesson();
+                        }
+                    });
+                }
+
+                return;
+            }
+        }
+    }
+
+    // Handle Virtue Banwa - Explore (no status indicator)
+    if (unitName == "VirtueBanwa" && lessonName == "Explore")
+    {
+        // No status indicator needed, player can enter anytime
+        return;
+    }
+
+    // Handle regular lessons and post-tests
+    string combinedIdentifier = $"{unitName} - {lessonName}";
+    foreach (Transform child in lessonButtonContainer)
+    {
+        TextMeshProUGUI buttonText = child.Find("LessonText")?.GetComponent<TextMeshProUGUI>();
+        if (buttonText != null && buttonText.text == combinedIdentifier)
+        {
+            // Find the status indicator and update its text
+            Transform statusIndicator = child.Find("StatusIndicator");
+            TextMeshProUGUI statusText = statusIndicator?.Find("StatusText")?.GetComponent<TextMeshProUGUI>();
+            if (statusText != null)
+            {
+                statusText.text = status.ToUpper();
+                Debug.Log($"Updated status for {unitName} - {lessonName} to {status.ToUpper()}");
+            }
+
+            // Disable the button if the status is Locked
+            Button button = child.GetComponent<Button>();
+            if (button != null)
+            {
+                button.interactable = status != "Locked";
+                Debug.Log($"Button for {unitName} - {lessonName} is now {(button.interactable ? "enabled" : "disabled")}");
+            }
+
+            return;
+        }
+    }
+
+    Debug.LogWarning($"Lesson button not found for Unit: {unitName}, Lesson: {lessonName}");
+}
+    //end here
+
+    // Only keep these classes if they're not defined elsewhere
+    [System.Serializable]
+    public class ProgressUpdateData
+    {
+        public string Username;
+        public string UnitName;
+        public string LessonName; // Add this field that was missing
+    }
+}

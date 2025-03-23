@@ -4,6 +4,8 @@ public class SchoolEntranceTrigger : MonoBehaviour
 {
     private GameManager gameManager;
     private SceneTransition sceneTransition;
+    [Tooltip("The scene to load when entering school")]
+    public string schoolSceneName = "Tutorial School";
 
     void Start()
     {
@@ -23,7 +25,8 @@ public class SchoolEntranceTrigger : MonoBehaviour
                 if (sceneTransition != null)
                 {
                     // Use SceneTransition for smooth transition
-                    sceneTransition.StartTransition("Tutorial School");
+                    sceneTransition.sceneToLoad = schoolSceneName;
+                    sceneTransition.StartTransition(schoolSceneName);
                 }
                 else
                 {
